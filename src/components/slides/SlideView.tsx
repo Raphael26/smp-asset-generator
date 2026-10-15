@@ -1,0 +1,309 @@
+"use client";
+
+import { Fragment, useLayoutEffect, useRef, type ReactNode } from "react";
+import type { AssetOptions, Slide } from "@/lib/content";
+import type { Format } from "@/lib/brand/formats";
+import { getLayout } from "@/lib/brand/layouts";
+import { universe as getUniverse } from "@/lib/brand/tokens";
+import { frenchTypo, parseRich, type Paragraph } from "@/lib/brand/typography";
+
+export type SlideViewProps = {
+  format: Format;
+  slide: Slide;
+  index: number;
+  total: number;
+  universeId: string | null;
+  options: AssetOptions;
+  /** URL of a media item (the render page asks for the full file, the editor for a preview size). */
+  mediaUrl: (mediaId: string) => string;
+  /** Show the field hints in faded type where a field is empty (editor only). */
+  placeholders?: boolean;
+  onFit?: (result: { fit: number; overflow: boolean }) => void;
+};
+
+const MIN_FIT = 0.62;
+
+function Rich({ paragraphs, as = "p" }: { paragraphs: Paragraph[]; as?: "p" | "span" }) {
+  const Tag = as;
+  return (
+    <>
+      {paragraphs.map((para, pi) => (
+        <Tag key={pi}>
+          {para.map((line, li) => (
+            <Fragment key={li}>
+              {li > 0 && <br />}
+              {line.map((piece, k) => {
+                let node: ReactNode = piece.text;
+                if (piece.em) node = <em>{node}</em>;
+                if (piece.strong) node = <strong>{node}</strong>;
+                return <Fragment key={k}>{node}</Fragment>;
+              })}
+            </Fragment>
+          ))}
+        </Tag>
+      ))}
+    </>
+  );
+}
+
+function VisioIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="2.5" y="6" width="13" height="12" rx="1.5" />
+      <path d="M15.5 10.5 21.5 7v10l-6-3.5" />
+    </svg>
+  );
+}
+
+export function SlideView({ format, slide, index, total, universeId, options, mediaUrl, placeholders = false, onFit }: SlideViewProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const def = getLayout(slide.layout);
+  const uni = getUniverse(universeId);
+
+  // Field value, or its placeholder in the editor; `ph` tells the caller it is a placeholder.
+  const field = (key: string): { value: string; ph: boolean } => {
+    const value = (slide.fields[key] ?? "").trim();
+    if (value) return { value, ph: false };
+    const fdef = def.fields.find((f) => f.key === key);
+    if (placeholders && fdef && !fdef.optional) return { value: fdef.placeholder, ph: true };
+    return { value: "", ph: false };
+  };
+  const rich = (key: string, className: string, as: "p" | "span" = "p", Wrapper: "div" | "h1" = "div") => {
+    const { value, ph } = field(key);
+    if (!value) return null;
+    return (
+      <Wrapper className={`${className}${ph ? " is-ph" : ""}`}>
+        <Rich paragraphs={parseRich(value)} as={as} />
+      </Wrapper>
+    );
+  };
+  const plain = (key: string, className: string) => {
+    const { value, ph } = field(key);
+    if (!value) return null;
+    return <p className={`${className}${ph ? " is-ph" : ""}`}>{frenchTypo(value.replace(/\*/g, ""))}</p>;
+  };
+
+  // Shrink the type until the body fits, once the fonts are ready. Runs on every change.
+  const contentKey = JSON.stringify([slide, format.id, options, placeholders, universeId]);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const body = bodyRef.current;
+    if (!el || !body) return;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      let fit = 1;
+      el.style.setProperty("--fit", "1");
+      const overflows = () => body.scrollHeight > body.clientHeight + 1 || body.scrollWidth > body.clientWidth + 1;
+      while (overflows() && fit > MIN_FIT) {
+        fit = Math.max(MIN_FIT, +(fit - 0.03).toFixed(2));
+        el.style.setProperty("--fit", String(fit));
+      }
+      const overflow = overflows();
+      el.dataset.fit = String(fit);
+      el.dataset.overflow = String(overflow);
+      el.dataset.ready = "true";
+      onFit?.({ fit, overflow });
+    };
+    el.dataset.ready = "false";
+    run();
+    document.fonts.ready.then(run);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentKey]);
+
+  const isLast = index === total - 1;
+  const swipe = format.multi && options.swipeHint && !isLast && total > 1;
+  const page = format.multi && options.pageNumbers && total > 1 ? `${index + 1} / ${total}` : null;
+
+  const logo =
+    options.logo === "none" ? null : options.logo === "monogram" ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img className="smp-logo is-mono" src="/brand/monogram.svg" alt="Spanish Mum in Paris" />
+    ) : (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img className="smp-logo" src="/brand/logo.svg" alt="Spanish Mum in Paris" />
+    );
+
+  const eyebrow = field("eyebrow");
+  const top = (
+    <div className="smp-top">
+      {eyebrow.value ? <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`}>{frenchTypo(eyebrow.value)}</span> : <span />}
+      {logo}
+    </div>
+  );
+
+  // Footer: the source of a figure (or the page number) on the left, « Glissez → » on the right.
+  const source = field("source");
+  const sourceText = slide.layout === "figure" && source.value ? frenchTypo(`Source : ${source.value.replace(/^source\s*:\s*/i, "")}`) : null;
+  const bottom = (
+    <div className="smp-bottom">
+      {sourceText ? <span className={source.ph ? "is-ph" : ""}>{sourceText}</span> : page && <span>{page}</span>}
+      {swipe ? (
+        <span className="smp-swipe">
+          Glissez <span aria-hidden>→</span>
+        </span>
+      ) : (
+        sourceText && page && <span className="smp-swipe">{page}</span>
+      )}
+    </div>
+  );
+
+  const image = slide.image;
+  const photo = (
+    <div className="smp-photo">
+      {image ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={mediaUrl(image.mediaId)}
+          alt=""
+          style={{
+            objectPosition: `${image.focusX}% ${image.focusY}%`,
+            transform: image.zoom > 1 ? `scale(${image.zoom})` : undefined,
+            transformOrigin: `${image.focusX}% ${image.focusY}%`,
+          }}
+        />
+      ) : slide.photoJob && placeholders ? (
+        <div className="smp-photo-empty anim-pulse">Generating the photo…</div>
+      ) : (
+        <div className="smp-photo-empty">{placeholders ? "Choose a photo" : ""}</div>
+      )}
+    </div>
+  );
+
+  let body: ReactNode;
+  switch (slide.layout) {
+    case "cover":
+      body = (
+        <>
+          {index === 0 && options.universeTag && uni && (
+            <span className="smp-tag" style={{ background: uni.tint, color: uni.tintInk }}>
+              {uni.number} — {uni.short}
+            </span>
+          )}
+          {rich("title", "smp-title", "span", "h1")}
+          {rich("subtitle", "smp-lead")}
+        </>
+      );
+      break;
+    case "figure":
+      body = (
+        <>
+          {rich("title", "smp-title", "span", "h1")}
+          <div className="smp-stat">
+            {plain("value", "smp-value")}
+            {rich("text", "smp-stat-text")}
+            {plain("contrast", "smp-contrast")}
+          </div>
+        </>
+      );
+      break;
+    case "text":
+      body = (
+        <>
+          {plain("number", "smp-number")}
+          {rich("title", "smp-title", "span", "h1")}
+          {rich("body", "smp-body-text")}
+        </>
+      );
+      break;
+    case "list": {
+      const items = field("items");
+      body = (
+        <>
+          {rich("title", "smp-title", "span", "h1")}
+          {items.value && (
+            <ul className={`smp-items${items.ph ? " is-ph" : ""}`}>
+              {items.value
+                .split("\n")
+                .map((l) => l.trim())
+                .filter(Boolean)
+                .map((item, i) => (
+                  <li key={i}>
+                    <span>
+                      <Rich paragraphs={parseRich(item)} as="span" />
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </>
+      );
+      break;
+    }
+    case "quote": {
+      const q = field("quote");
+      const author = field("author");
+      const role = field("role");
+      body = (
+        <>
+          {q.value && (
+            <div className={`smp-quote${q.ph ? " is-ph" : ""}`}>
+              <Rich paragraphs={parseRich(`«${q.value.replace(/^[«"\s]+|[»"\s]+$/g, "")}»`)} />
+            </div>
+          )}
+          {author.value && <p className={`smp-signature${author.ph ? " is-ph" : ""}`}>{frenchTypo(author.value)}</p>}
+          {role.value && <p className="smp-role">{frenchTypo(role.value)}</p>}
+        </>
+      );
+      break;
+    }
+    case "photo":
+      body = (
+        <>
+          {rich("title", "smp-title", "span", "h1")}
+          {rich("text", "smp-body-text")}
+        </>
+      );
+      break;
+    case "cta": {
+      const button = field("button");
+      const url = field("url");
+      body = (
+        <>
+          {eyebrow.value && <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`}>{frenchTypo(eyebrow.value)}</span>}
+          {rich("title", "smp-title", "span", "h1")}
+          {rich("text", "smp-lead")}
+          {button.value && (
+            <span className={`smp-button${button.ph ? " is-ph" : ""}`}>
+              {/r[ée]server un appel/i.test(button.value) ? <VisioIcon /> : null}
+              {frenchTypo(button.value)}
+              {/r[ée]server un appel/i.test(button.value) ? null : <span aria-hidden>→</span>}
+            </span>
+          )}
+          {url.value && <p className="smp-url">{url.value}</p>}
+        </>
+      );
+      break;
+    }
+  }
+
+  const ctaTop = <div className="smp-top">{logo}</div>;
+  const ctaBottom = (
+    <div className="smp-bottom">
+      <span className="smp-tagline">Creating a home you love.</span>
+    </div>
+  );
+
+  return (
+    <div
+      ref={ref}
+      className={`smp-slide smp-layout-${slide.layout}${slide.layout === "figure" && !field("title").value ? " no-title" : ""}`}
+      data-shape={format.shape}
+      data-ground={slide.ground}
+      style={{ width: format.width, height: format.height }}
+    >
+      {slide.layout === "photo" && photo}
+      <div className="smp-inner">
+        {slide.layout === "cta" ? ctaTop : top}
+        <div className="smp-body" ref={bodyRef}>
+          {body}
+        </div>
+        {slide.layout === "cta" ? ctaBottom : bottom}
+      </div>
+    </div>
+  );
+}

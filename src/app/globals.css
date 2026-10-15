@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* The studio itself follows the brand: light grounds, ink text, Fraunces Light titles,
+   Albert Sans for everything that informs, square corners, hairlines. */
+@theme {
+  --color-cream: #f7f4ee;
+  --color-paper: #fffdf9;
+  --color-stone: #eee8df;
+  --color-band: #e8dfd4;
+  --color-ink: #302b27;
+  --color-ink-soft: #4d453f;
+  --color-taupe: #6f6054;
+  --color-taupe-logo: #8a6e5b;
+  --color-muted: #75695f;
+  --color-line: #ded7cd;
+  --color-rule: #b9aa9b;
+  --color-sable: #efe6d8;
+  --color-sauge: #e5e8de;
+  --color-sauge-ink: #535c49;
+  --color-blush: #f0e2dc;
+  --color-flag: #7c3f2f;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-sans: "Albert Sans", Arial, sans-serif;
+}
+
+html, body { background: var(--color-cream); color: var(--color-ink); }
+body { font-family: var(--font-sans); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+:focus-visible { outline: 2px solid var(--color-ink); outline-offset: 3px; }
+::selection { background: var(--color-sable); }
+
+@layer components {
+  .display { font-family: var(--font-display); font-weight: 300; font-variation-settings: "opsz" 144; letter-spacing: -0.02em; line-height: 1.05; }
+  .display em { font-style: italic; color: var(--color-taupe-logo); }
+  .eyebrow { font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase; color: var(--color-taupe); }
+  .label { display: block; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--color-taupe); margin-bottom: 6px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 18px; border: 1px solid var(--color-ink);
+    font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase; white-space: nowrap; cursor: pointer; transition: background .15s, color .15s, opacity .15s; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn-solid { background: var(--color-ink); color: var(--color-cream); }
+  .btn-solid:not(:disabled):hover { background: #463f39; }
+  .btn-outline { background: transparent; color: var(--color-ink); }
+  .btn-outline:not(:disabled):hover { background: var(--color-paper); }
+  .btn-ghost { border-color: transparent; background: transparent; color: var(--color-taupe); padding: 0 10px; }
+  .btn-ghost:not(:disabled):hover { color: var(--color-ink); background: var(--color-stone); }
+  .btn-sm { height: 32px; padding: 0 12px; font-size: 10.5px; }
+  .btn-icon { width: 36px; height: 36px; padding: 0; border-radius: 999px; }
+
+  .field { width: 100%; background: var(--color-paper); border: 1px solid var(--color-line); border-radius: 2px; padding: 8px 10px; font-size: 14px; line-height: 1.5; color: var(--color-ink); }
+  .field:focus { outline: 2px solid var(--color-ink); outline-offset: 1px; border-color: var(--color-ink); }
+  .field::placeholder { color: #9b8f85; }
+  textarea.field { resize: vertical; min-height: 64px; }
+  select.field { appearance: none; padding-right: 28px; background-image: linear-gradient(45deg, transparent 50%, var(--color-taupe) 50%), linear-gradient(135deg, var(--color-taupe) 50%, transparent 50%);
+    background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
+
+  .panel { background: var(--color-paper); border: 1px solid var(--color-line); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid #c9bdb0; padding: 3px 10px; font-size: 11px; letter-spacing: .06em; color: var(--color-ink-soft); background: transparent; cursor: pointer; white-space: nowrap; }
+  .chip[aria-pressed="true"] { background: var(--color-ink); border-color: var(--color-ink); color: var(--color-cream); }
+  .tag { display: inline-block; padding: 3px 8px 2px; font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; line-height: 1.4; }
+  .hairline { border-color: var(--color-line); }
+}
+
+/* Motion: quiet and useful (guidelines 06), off when the visitor asks for less. */
+@keyframes smp-fade { from { opacity: 0; } }
+@keyframes smp-rise { from { opacity: 0; transform: translateY(16px); } }
+@keyframes smp-pulse { 50% { opacity: .45; } }
+.anim-fade { animation: smp-fade .25s ease; }
+.anim-rise { animation: smp-rise .25s ease; }
+.anim-pulse { animation: smp-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .anim-fade, .anim-rise, .anim-pulse { animation: none; } }
+
+/* Thin scrollbars inside panels. */
+.scroll-thin { scrollbar-width: thin; scrollbar-color: #c9bdb0 transparent; }
