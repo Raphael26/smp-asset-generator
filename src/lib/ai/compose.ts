@@ -4,7 +4,7 @@
 import { z } from "zod";
 import type { Asset, CreateOptions, Media } from "@/lib/db/schema";
 import { DEFAULT_OPTIONS, type AssetContent, type GalleryItem, type GroundId, type ImageRef, type LayoutId, type Slide } from "@/lib/content";
-import { FORMATS, getFormat, isDocument, type Format } from "@/lib/brand/formats";
+import { ALL_FORMATS, FORMATS, LANDSCAPE_DOCUMENTS, getFormat, isDocument, isLandscape, withOrientation, type Format } from "@/lib/brand/formats";
 import { LAYOUTS, MAX_GALLERY, equivalentLayout, getLayout, newSlide } from "@/lib/brand/layouts";
 import { GROUNDS, UNIVERSES } from "@/lib/brand/tokens";
 import { PHOTO_BRIEF } from "@/lib/brand/voice";
@@ -23,6 +23,7 @@ function buildGuide(): string {
   l.push("");
   l.push("## Formats");
   for (const f of FORMATS) l.push(`- ${f.id}: ${f.platform} ${f.name.toLowerCase()}, ${f.width}×${f.height}, ${f.multi ? `carousel of up to ${f.maxSlides} slides` : "a single image (exactly one slide)"}. ${f.hint}`);
+  l.push(`- ${LANDSCAPE_DOCUMENTS.map((f) => f.id).join(", ")}: the same A4 documents in landscape (${LANDSCAPE_DOCUMENTS[0].width}×${LANDSCAPE_DOCUMENTS[0].height}).`);
   l.push("");
   const photoNote = (t: (typeof LAYOUTS)[number]) =>
     t.image === "required" ? " Has a photo (required)." : t.image === "optional" ? " Can have a photo." : t.image === "gallery" ? ` Has a gallery of up to ${MAX_GALLERY} photos.` : "";
@@ -76,6 +77,7 @@ function buildGuide(): string {
   l.push("- Offer sheet (doc-offer): one to three pages: an optional cover, one offer page per formula with the exact names and prices, the closing page.");
   l.push("- Corporate proposal (doc-proposal): « Préparé pour » the company on the cover, a context page (what is at stake for them), a key-figures page (only figures she gave, each with its source), the programme of the Home & Life Balance workshop, an offer page (price « Sur devis » unless she gives one), The Home Balance Toolkit if relevant, the closing page.");
   l.push("- Tables: three to five columns, at most fifteen rows. Checklists: short items to tick.");
+  l.push("- Orientation: portrait unless she asks for landscape (« paysage », « horizontal », « à l’italienne »); then use the « -landscape » id of the same document. Landscape pages use the same templates and hold about as much text: the photo, the moodboard gallery or the offer's list sits beside the text, text pages and checklists run in two columns. A landscape table holds about ten rows: split a longer one over two pages.");
   l.push("- Moodboard: four to six photos in its gallery, the palette as the project's hex colours, the main materials.");
   l.push("- Caption for a document: the short message to send with the PDF (an e-mail to the client, or a post announcing the guide), plain text.");
   l.push("");
@@ -93,7 +95,7 @@ export const COMPOSE_GUIDE = buildGuide();
 // ——— Output schema ———
 
 const ids = <T extends string>(xs: readonly T[]) => xs as unknown as [T, ...T[]];
-const FORMAT_IDS = ids(FORMATS.map((f) => f.id));
+const FORMAT_IDS = ids(ALL_FORMATS.map((f) => f.id));
 const LAYOUT_IDS = ids(LAYOUTS.map((t) => t.id));
 const GROUND_IDS = ids(GROUNDS.map((g) => g.id));
 const UNIVERSE_IDS = ids([...UNIVERSES.map((u) => u.id), "none"]);
@@ -281,12 +283,14 @@ export function parseOptions(b: Record<string, unknown>): CreateOptions {
 
 export async function composeFromPrompt(prompt: string, options: CreateOptions, media: Media[]): Promise<Proposal> {
   const fixed = options.formatId !== "auto" ? getFormat(options.formatId) : null;
+  // Portrait is only the default orientation of the picker: her prompt may ask for the other one.
+  const turned = fixed && isDocument(fixed) ? withOrientation(fixed, !isLandscape(fixed)) : null;
   const user = [
     "Rebeca's prompt:",
     prompt.trim(),
     "",
     fixed
-      ? `Format: ${fixed.id} (chosen by her, keep it).`
+      ? `Format: ${fixed.id} (chosen by her, keep it${turned ? `; ${turned.id} if her prompt asks for the document in ${isLandscape(turned) ? "landscape" : "portrait"}` : ""}).`
       : "Format: choose the one that suits her request best (a carousel for several points or figures, a post for one idea, a story for a quick tip or announcement). If she names a platform, stay on it.",
     options.universe === "auto" ? "Universe: choose the one her request belongs to, or none." : `Universe: ${options.universe} (chosen by her).`,
     fixed?.multi || !fixed ? (options.slides ? `Number of slides: ${options.slides} if it is a carousel.` : "") : "",
@@ -298,17 +302,22 @@ export async function composeFromPrompt(prompt: string, options: CreateOptions, 
     .filter(Boolean)
     .join("\n");
   const out = await structured({ schema: ComposeSchema, operation: "compose", user, effort: "medium", guide: COMPOSE_GUIDE });
-  return normalize(out, { format: fixed ?? getFormat(out.formatId), media, existing: null, images: options.images });
+  const format = turned && out.formatId === turned.id ? turned : (fixed ?? getFormat(out.formatId));
+  return normalize(out, { format, media, existing: null, images: options.images });
 }
 
 export async function editWithPrompt(asset: Asset, instruction: string, media: Media[]): Promise<Proposal> {
   const format = getFormat(asset.formatId);
+  // A document may change orientation when she asks for it; nothing else changes format here.
+  const turned = isDocument(format) ? withOrientation(format, !isLandscape(format)) : null;
   const user = [
     "Here is a visual Rebeca is working on. She asks for a change:",
     instruction.trim(),
     "",
     "Return the whole visual with the change made. Keep everything she did not ask to change exactly as it is: same text, same templates, same order, and photo source « keep » for photos that stay. For each slide, basedOn is the number of the current slide it comes from (null for a new slide).",
-    `Keep the format ${format.id}.`,
+    turned
+      ? `Keep the format ${format.id}, unless she asks for the document in ${isLandscape(turned) ? "landscape" : "portrait"}: then use ${turned.id}.`
+      : `Keep the format ${format.id}.`,
     "",
     describeAsset(asset, null),
     `Caption: ${JSON.stringify(asset.content.caption)}`,
@@ -317,7 +326,8 @@ export async function editWithPrompt(asset: Asset, instruction: string, media: M
     libraryList(media),
   ].join("\n");
   const out = await structured({ schema: ComposeSchema, operation: "edit", user, effort: "medium", guide: COMPOSE_GUIDE, assetId: asset.id });
-  const p = normalize({ ...out, formatId: format.id }, { format, media, existing: asset, images: "auto" });
+  const chosen = turned && out.formatId === turned.id ? turned : format;
+  const p = normalize({ ...out, formatId: chosen.id }, { format: chosen, media, existing: asset, images: "auto" });
   return { ...p, title: asset.title, universe: asset.universe };
 }
 

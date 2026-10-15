@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { AssetContent } from "@/lib/content";
-import { getFormat } from "@/lib/brand/formats";
+import { getFormat, type Format } from "@/lib/brand/formats";
 import { Modal } from "@/components/ui/Modal";
 import { ScaledSlide, previewUrl } from "@/components/slides/ScaledSlide";
 import { usd } from "@/components/ui/api";
@@ -11,8 +11,7 @@ import { Switch } from "@/components/ui/Switch";
 
 export type Proposal = { title: string; formatId: string; universe: string | null; content: AssetContent; notes: string[]; generate: { slideId: string; prompt: string }[] };
 
-function Strip({ asset, content, label, generating }: { asset: Asset; content: AssetContent; label: string; generating?: Set<string> }) {
-  const format = getFormat(asset.formatId);
+function Strip({ asset, format, content, label, generating }: { asset: Asset; format: Format; content: AssetContent; label: string; generating?: Set<string> }) {
   const w = format.width >= format.height ? 210 : 132;
   return (
     <div>
@@ -96,8 +95,8 @@ export function ChangeDialog({
             </ul>
           </div>
         )}
-        <Strip asset={asset} content={asset.content} label="Now" />
-        <Strip asset={asset} content={proposal.content} label="Proposed" generating={generating} />
+        <Strip asset={asset} format={getFormat(asset.formatId)} content={asset.content} label="Now" />
+        <Strip asset={asset} format={getFormat(proposal.formatId)} content={proposal.content} label="Proposed" generating={generating} />
         {captionChanged && (
           <div>
             <p className="eyebrow mb-2">Caption</p>

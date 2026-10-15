@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { Issue } from "@/lib/brand/lint";
-import { getFormat, unitName } from "@/lib/brand/formats";
+import { getFormat, isLandscape, unitName } from "@/lib/brand/formats";
 import { getLayout } from "@/lib/brand/layouts";
 import { ScaledSlide, previewUrl } from "@/components/slides/ScaledSlide";
 import { Icon } from "@/components/ui/Icon";
@@ -67,7 +67,7 @@ export function Stage({
           )}
           <span className="text-[12.5px] text-ink-soft">
             {total > 1 ? `${unitName(format) === "page" ? "Page" : "Slide"} ${current + 1} of ${total} · ` : ""}
-            {slide ? getLayout(slide.layout).name : ""} · {format.shape === "a4" ? "A4" : `${format.width} × ${format.height}`}
+            {slide ? getLayout(slide.layout).name : ""} · {format.shape === "a4" ? (isLandscape(format) ? "A4 landscape" : "A4") : `${format.width} × ${format.height}`}
           </span>
           {total > 1 && (
             <button className="btn btn-ghost btn-sm" disabled={current === total - 1} onClick={() => setCurrent(current + 1)} aria-label={`Next ${unitName(format)}`}>

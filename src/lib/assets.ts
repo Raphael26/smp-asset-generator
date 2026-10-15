@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
 import type { Asset, CreateOptions } from "@/lib/db/schema";
 import { DEFAULT_OPTIONS, type AssetContent } from "@/lib/content";
-import { getFormat } from "@/lib/brand/formats";
+import { ALL_FORMATS, getFormat } from "@/lib/brand/formats";
 import { slidesFromStarter, startersFor } from "@/lib/brand/layouts";
 import { UserFacingError } from "@/lib/errors";
 
@@ -55,6 +55,7 @@ export function updateAsset(id: string, patch: AssetPatch): Asset {
     if (patch[k] !== undefined) (allowed as Record<string, unknown>)[k] = patch[k];
   }
   if (allowed.status && !["draft", "ready", "published"].includes(allowed.status)) throw new UserFacingError("Unknown status.");
+  if (allowed.formatId && !ALL_FORMATS.some((f) => f.id === allowed.formatId)) throw new UserFacingError("Unknown format.");
   db.update(schema.assets)
     .set({ ...allowed, updatedAt: new Date().toISOString() })
     .where(eq(schema.assets.id, id))

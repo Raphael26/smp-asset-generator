@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
-import { FORMATS, PLATFORMS, type Format } from "@/lib/brand/formats";
+import { FORMATS, PLATFORMS, isDocument, withOrientation, type Format } from "@/lib/brand/formats";
 import { getLayout, startersFor } from "@/lib/brand/layouts";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { api } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
+import { OrientationChoice } from "@/components/studio/OrientationChoice";
 
 function FormatShape({ f }: { f: Format }) {
   const max = 64;
@@ -28,6 +29,8 @@ export default function NewAssetPage() {
   const router = useRouter();
   const toast = useToast();
   const [format, setFormat] = useState<Format | null>(null);
+  // Orientation of the A4 documents, offered under them.
+  const [landscape, setLandscape] = useState(false);
   const [title, setTitle] = useState("");
   const [uni, setUni] = useState<string | null>(null);
   const [starter, setStarter] = useState<string | null>(null);
@@ -75,26 +78,37 @@ export default function NewAssetPage() {
             <div key={p}>
               <p className="eyebrow mb-3">{p}</p>
               <div className="flex flex-col gap-2">
-                {FORMATS.filter((f) => f.platform === p).map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => {
-                      setFormat(f);
-                      setStarter(null);
-                    }}
-                    className={`flex items-center gap-3 border p-2 pr-4 text-left transition-colors ${
-                      format?.id === f.id ? "border-ink bg-paper" : "border-line bg-paper/60 hover:border-rule hover:bg-paper"
-                    }`}
-                  >
-                    <FormatShape f={f} />
-                    <span>
-                      <span className="block text-[14px] font-medium">{f.name}</span>
-                      <span className="block text-[12px] text-muted">
-                        {f.shape === "a4" ? "A4 PDF" : `${f.width} × ${f.height}`} · {f.hint}
+                {FORMATS.filter((f) => f.platform === p)
+                  .map((f) => withOrientation(f, landscape))
+                  .map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setFormat(f);
+                        setStarter(null);
+                      }}
+                      className={`flex items-center gap-3 border p-2 pr-4 text-left transition-colors ${
+                        format?.id === f.id ? "border-ink bg-paper" : "border-line bg-paper/60 hover:border-rule hover:bg-paper"
+                      }`}
+                    >
+                      <FormatShape f={f} />
+                      <span>
+                        <span className="block text-[14px] font-medium">{f.name}</span>
+                        <span className="block text-[12px] text-muted">
+                          {f.shape === "a4" ? "A4 PDF" : `${f.width} × ${f.height}`} · {f.hint}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                {p === "Document" && (
+                  <OrientationChoice
+                    landscape={landscape}
+                    onChange={(l) => {
+                      setLandscape(l);
+                      if (format && isDocument(format)) setFormat(withOrientation(format, l));
+                    }}
+                  />
+                )}
               </div>
             </div>
           ))}

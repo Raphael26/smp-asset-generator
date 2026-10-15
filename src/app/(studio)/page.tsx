@@ -4,13 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Asset, CreateOptions } from "@/lib/db/schema";
-import { FORMATS, PLATFORMS, getFormat } from "@/lib/brand/formats";
+import { FORMATS, PLATFORMS, getFormat, isDocument, isLandscape, withOrientation } from "@/lib/brand/formats";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { api, relativeTime } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
 import { Switch } from "@/components/ui/Switch";
 import { AssetThumb } from "@/components/studio/AssetThumb";
+import { OrientationChoice } from "@/components/studio/OrientationChoice";
 
 const EXAMPLES: { label: string; prompt: string; options?: Partial<CreateOptions> }[] = [
   {
@@ -98,6 +99,8 @@ export default function CreatePage() {
   }, [busy]);
 
   const format = options.formatId === "auto" ? null : getFormat(options.formatId);
+  // Documents come in portrait or landscape; choosing another document keeps the orientation.
+  const landscape = Boolean(format && isDocument(format) && isLandscape(format));
   const set = (patch: Partial<CreateOptions>) => setOptions((o) => ({ ...o, ...patch }));
   const mayGenerate = options.images !== "none" && options.images !== "library";
 
@@ -208,7 +211,13 @@ export default function CreatePage() {
           <label className="label" htmlFor="opt-format">
             Format
           </label>
-          <select id="opt-format" className="field" value={options.formatId} onChange={(e) => set({ formatId: e.target.value })} disabled={busy}>
+          <select
+            id="opt-format"
+            className="field"
+            value={format?.landscapeOf ?? options.formatId}
+            onChange={(e) => set({ formatId: e.target.value === "auto" ? "auto" : withOrientation(getFormat(e.target.value), landscape).id })}
+            disabled={busy}
+          >
             <option value="auto">Let Claude choose</option>
             {PLATFORMS.map((p) => (
               <optgroup key={p} label={p}>
@@ -220,6 +229,11 @@ export default function CreatePage() {
               </optgroup>
             ))}
           </select>
+          {format && isDocument(format) && (
+            <div className="mt-2.5">
+              <OrientationChoice landscape={landscape} onChange={(l) => set({ formatId: withOrientation(format, l).id })} disabled={busy} />
+            </div>
+          )}
         </div>
         <div>
           <label className="label" htmlFor="opt-universe">

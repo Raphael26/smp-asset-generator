@@ -75,7 +75,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     try {
       await api(`/api/assets/${a.id}`, {
         method: "PUT",
-        json: { title: a.title, universe: a.universe, status: a.status, content: a.content, notes: a.notes, publishedAt: a.publishedAt, publishedUrl: a.publishedUrl },
+        json: { title: a.title, formatId: a.formatId, universe: a.universe, status: a.status, content: a.content, notes: a.notes, publishedAt: a.publishedAt, publishedUrl: a.publishedUrl },
       });
       savedVersion.current = Math.max(savedVersion.current, v);
       setSave(version.current === savedVersion.current ? "saved" : "pending");
@@ -293,7 +293,8 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     const { mode, data, prompt } = proposal;
     await flush();
     await api(`/api/assets/${asset.id}/revisions`, { method: "POST", json: { reason: mode === "edit" ? "Before a change asked to Claude" : "Before regenerating from the prompt" } });
-    update((a) => ({ ...a, content: data.content, ...(mode === "regenerate" ? { prompt } : {}) }));
+    // The format changes only when Claude turned a document to the other orientation, as she asked.
+    update((a) => ({ ...a, formatId: data.formatId, content: data.content, ...(mode === "regenerate" ? { prompt } : {}) }));
     setProposal(null);
     if (mode === "regenerate") setCurrentRaw(0);
     else setCurrentRaw((c) => Math.min(c, data.content.slides.length - 1));

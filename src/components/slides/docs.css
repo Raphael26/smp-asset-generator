@@ -54,7 +54,8 @@
 .doc-cover .smp-body { display: flex; flex-direction: column; justify-content: flex-end; padding-top: 28px; }
 .doc-cover-photo { height: 410px; margin-bottom: 34px; flex: none; }
 .doc-cover-block { padding: 0; }
-.doc-cover-block[style] { padding: 44px 40px 40px; margin: 0 -8px; }
+/* Tinted block (a universe, no photo). It stays inside the margins: wider, it would count as overflow and shrink the type. */
+.doc-cover-block[style] { padding: 44px 40px 40px; }
 .doc-tag { display: inline-block; padding: 5px 9px 4px; font-size: 9px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 22px; }
 .doc-cover-block .doc-eyebrow { margin-bottom: 14px; }
 .doc-cover-title { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-variation-settings: "opsz" 144; font-size: calc(var(--cover-title) * var(--fit) * 1px);
@@ -131,3 +132,37 @@
 .doc-quote-wrap { height: 100%; display: flex; flex-direction: column; justify-content: center; max-width: 560px; }
 .doc-quote { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-style: italic; font-variation-settings: "opsz" 144; font-size: calc(var(--quote-size) * var(--fit) * 1px); line-height: 1.25; letter-spacing: -.01em; text-wrap: balance; margin-bottom: 22px; }
 .doc-quote-wrap .doc-signature { font-size: 20px; margin-bottom: 6px; }
+
+/* Landscape A4 (1123 × 794): the same pages, laid out for the width. A photo, the moodboard gallery or
+   the offer's list fills one half of the page beside the text; long text and checklists run in two columns. */
+.smp-doc[data-orientation="landscape"] .smp-body { padding-top: 28px; }
+.doc-split { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; height: 100%; }
+.doc-split > * { min-width: 0; min-height: 0; }
+.doc-split-text { display: flex; flex-direction: column; align-items: flex-start; }
+.doc-split-text > * { max-width: 100%; }
+.doc-split-center { justify-content: safe center; }
+.doc-split .doc-photo { height: auto; margin: 0; }
+
+.doc-split-cover { align-items: end; }
+.doc-split-cover .doc-photo { align-self: stretch; }
+.smp-doc[data-orientation="landscape"] .doc-cover-title { max-width: 760px; }
+.smp-doc[data-orientation="landscape"].doc-cover .doc-lead { max-width: 620px; }
+
+.smp-doc[data-orientation="landscape"].smp-layout-doc-page .doc-rich { columns: 2; column-gap: 48px; max-width: none; }
+.smp-doc[data-orientation="landscape"] .doc-rich .doc-h { break-after: avoid; }
+.smp-doc[data-orientation="landscape"] .doc-rich :is(p, li) { break-inside: avoid; }
+
+.smp-doc[data-orientation="landscape"] .doc-checks { columns: 2; column-gap: 48px; max-width: none; border-top: 1px solid var(--line); border-bottom: 0; }
+.smp-doc[data-orientation="landscape"] .doc-checks li { break-inside: avoid; border-top: 0; border-bottom: 1px solid var(--line); }
+
+.doc-split .doc-included { margin: 0; align-self: start; }
+.doc-split .doc-included ul { columns: 1; }
+
+.doc-split-moodboard { grid-template-columns: 1.35fr 1fr; }
+.doc-split .doc-gallery { margin: 0; grid-auto-rows: 1fr; }
+.doc-split .doc-gallery[data-count="2"] { grid-template-columns: 1fr; }
+.doc-split .doc-gallery-cell { aspect-ratio: auto !important; }
+.doc-split .doc-swatches-row { grid-template-columns: 1fr; gap: 22px; margin-top: 4px; }
+
+.smp-doc[data-orientation="landscape"] .doc-quote-wrap { max-width: 720px; }
+.smp-doc[data-orientation="landscape"].doc-closing .doc-lead { max-width: 560px; }

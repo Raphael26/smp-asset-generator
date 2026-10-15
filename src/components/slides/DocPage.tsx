@@ -2,6 +2,7 @@
 
 import { Fragment, useRef, type ReactNode } from "react";
 import type { ImageRef } from "@/lib/content";
+import { isLandscape } from "@/lib/brand/formats";
 import { getLayout, MAX_GALLERY } from "@/lib/brand/layouts";
 import { universe as getUniverse } from "@/lib/brand/tokens";
 import { frenchTypo, parseBlocks, parseRich, splitLinks, type Line } from "@/lib/brand/typography";
@@ -98,12 +99,14 @@ const linkFor = (line: string) => {
   return splitLinks(t).find((p) => p.href)?.href ?? null;
 };
 
-/** One A4 page of a document: the brand's client-document look (guidelines 08). */
+/** One A4 page of a document: the brand's client-document look (guidelines 08). In landscape, photos,
+ *  galleries and the offer's list sit beside the text instead of above or below it. */
 export function DocPage({ format, slide, index, total, universeId, options, mediaUrl, placeholders = false, onFit, title = "" }: SlideViewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const def = getLayout(slide.layout);
   const uni = getUniverse(universeId);
+  const landscape = isLandscape(format);
   useFit(ref, bodyRef, JSON.stringify([slide, format.id, options, placeholders, universeId, title, index, total]), onFit);
 
   const field = (key: string): { value: string; ph: boolean } => {
@@ -167,30 +170,41 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       chrome = "cover";
       const preparedFor = field("preparedFor");
       const date = field("date");
-      body = (
-        <>
-          {slide.image || slide.photoJob ? (
-            <Photo image={slide.image} pending={Boolean(slide.photoJob)} mediaUrl={mediaUrl} placeholders={placeholders} className="doc-cover-photo" />
-          ) : null}
-          <div className="doc-cover-block" style={uni && !slide.image && !slide.photoJob ? { background: uni.tint } : undefined}>
-            {uni && (
-              <span className="doc-tag" style={{ background: slide.image || slide.photoJob ? uni.tint : "var(--paper)", color: uni.tintInk }}>
-                {uni.number} — {uni.short}
-              </span>
-            )}
-            {eyebrow.value && <p className={`doc-eyebrow${ph(eyebrow)}`}>{frenchTypo(eyebrow.value)}</p>}
-            {rich("title", "doc-cover-title", "h1")}
-            {rich("subtitle", "doc-lead")}
-            {(preparedFor.value || date.value) && (
-              <p className="doc-for">
-                {preparedFor.value && <span>{frenchTypo(preparedFor.value)}</span>}
-                {preparedFor.value && date.value && <span className="doc-dot">·</span>}
-                {date.value && <span>{frenchTypo(date.value)}</span>}
-              </p>
-            )}
-          </div>
-        </>
+      const photo =
+        slide.image || slide.photoJob ? (
+          <Photo image={slide.image} pending={Boolean(slide.photoJob)} mediaUrl={mediaUrl} placeholders={placeholders} className="doc-cover-photo" />
+        ) : null;
+      const block = (
+        <div className="doc-cover-block" style={uni && !photo ? { background: uni.tint } : undefined}>
+          {uni && (
+            <span className="doc-tag" style={{ background: photo ? uni.tint : "var(--paper)", color: uni.tintInk }}>
+              {uni.number} — {uni.short}
+            </span>
+          )}
+          {eyebrow.value && <p className={`doc-eyebrow${ph(eyebrow)}`}>{frenchTypo(eyebrow.value)}</p>}
+          {rich("title", "doc-cover-title", "h1")}
+          {rich("subtitle", "doc-lead")}
+          {(preparedFor.value || date.value) && (
+            <p className="doc-for">
+              {preparedFor.value && <span>{frenchTypo(preparedFor.value)}</span>}
+              {preparedFor.value && date.value && <span className="doc-dot">·</span>}
+              {date.value && <span>{frenchTypo(date.value)}</span>}
+            </p>
+          )}
+        </div>
       );
+      body =
+        landscape && photo ? (
+          <div className="doc-split doc-split-cover">
+            {block}
+            {photo}
+          </div>
+        ) : (
+          <>
+            {photo}
+            {block}
+          </>
+        );
       break;
     }
     case "doc-page":
@@ -201,15 +215,27 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
         </>
       );
       break;
-    case "doc-photo":
-      body = (
+    case "doc-photo": {
+      const photo = <Photo image={slide.image} pending={Boolean(slide.photoJob)} mediaUrl={mediaUrl} placeholders={placeholders} className="doc-page-photo" />;
+      const text = (
         <>
-          <Photo image={slide.image} pending={Boolean(slide.photoJob)} mediaUrl={mediaUrl} placeholders={placeholders} className="doc-page-photo" />
           {rich("title", "doc-title doc-title-sm", "h2")}
           {blocks("body", "doc-rich")}
         </>
       );
+      body = landscape ? (
+        <div className="doc-split">
+          {photo}
+          <div className="doc-split-text doc-split-center">{text}</div>
+        </div>
+      ) : (
+        <>
+          {photo}
+          {text}
+        </>
+      );
       break;
+    }
     case "doc-checklist": {
       const items = field("items");
       body = (
@@ -294,25 +320,29 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
     case "doc-offer": {
       const button = field("button");
       const included = lines("included");
-      body = (
+      const head = (
         <>
           {rich("title", "doc-offer-name", "h2")}
           {plain("price", "doc-price")}
           {rich("description", "doc-lead")}
-          {included.length > 0 && (
-            <div className="doc-included">
-              <p className="doc-eyebrow">Ce qui est inclus</p>
-              <ul>
-                {included.map((it, i) => (
-                  <li key={i}>
-                    <span>
-                      <Rich paragraphs={parseRich(it)} as="span" />
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+        </>
+      );
+      const list = included.length > 0 && (
+        <div className="doc-included">
+          <p className="doc-eyebrow">Ce qui est inclus</p>
+          <ul>
+            {included.map((it, i) => (
+              <li key={i}>
+                <span>
+                  <Rich paragraphs={parseRich(it)} as="span" />
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+      const foot = (
+        <>
           {button.value && (
             <a className={`doc-button${ph(button)}`} href="https://calendly.com/spanishmuminparis">
               {/r[ée]server un appel/i.test(button.value) && <VisioIcon />}
@@ -322,6 +352,22 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
           {plain("note", "doc-small")}
         </>
       );
+      body =
+        landscape && list ? (
+          <div className="doc-split">
+            <div className="doc-split-text">
+              {head}
+              {foot}
+            </div>
+            {list}
+          </div>
+        ) : (
+          <>
+            {head}
+            {list}
+            {foot}
+          </>
+        );
       break;
     }
     case "doc-moodboard": {
@@ -329,42 +375,58 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       const shown = gallery.length ? gallery : placeholders ? [{ image: null }, { image: null }, { image: null }, { image: null }] : [];
       const palette = (field("palette").value.match(/#[0-9a-f]{3,8}\b/gi) ?? []).slice(0, 8);
       const materials = lines("materials");
-      body = (
+      const intro = (
         <>
           {rich("title", "doc-title doc-title-sm", "h2")}
           {rich("text", "doc-lead")}
-          {shown.length > 0 && (
-            <div className="doc-gallery" data-count={shown.length}>
-              {shown.map((g, i) => (
-                <Photo key={i} image={g.image} pending={Boolean("photoJob" in g && g.photoJob)} mediaUrl={mediaUrl} placeholders={placeholders} className="doc-gallery-cell" />
-              ))}
-            </div>
-          )}
-          {(palette.length > 0 || materials.length > 0) && (
-            <div className="doc-swatches-row">
-              {palette.length > 0 && (
-                <div>
-                  <p className="doc-eyebrow">Palette</p>
-                  <div className="doc-swatches">
-                    {palette.map((c) => (
-                      <span key={c} className="doc-swatch">
-                        <span style={{ background: c }} />
-                        {c.toUpperCase()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {materials.length > 0 && (
-                <div>
-                  <p className="doc-eyebrow">Matières</p>
-                  <p className="doc-materials">{materials.map((m) => frenchTypo(m)).join("  ·  ")}</p>
-                </div>
-              )}
-            </div>
-          )}
         </>
       );
+      const grid = shown.length > 0 && (
+        <div className="doc-gallery" data-count={shown.length}>
+          {shown.map((g, i) => (
+            <Photo key={i} image={g.image} pending={Boolean("photoJob" in g && g.photoJob)} mediaUrl={mediaUrl} placeholders={placeholders} className="doc-gallery-cell" />
+          ))}
+        </div>
+      );
+      const swatches = (palette.length > 0 || materials.length > 0) && (
+        <div className="doc-swatches-row">
+          {palette.length > 0 && (
+            <div>
+              <p className="doc-eyebrow">Palette</p>
+              <div className="doc-swatches">
+                {palette.map((c) => (
+                  <span key={c} className="doc-swatch">
+                    <span style={{ background: c }} />
+                    {c.toUpperCase()}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {materials.length > 0 && (
+            <div>
+              <p className="doc-eyebrow">Matières</p>
+              <p className="doc-materials">{materials.map((m) => frenchTypo(m)).join("  ·  ")}</p>
+            </div>
+          )}
+        </div>
+      );
+      body =
+        landscape && grid ? (
+          <div className="doc-split doc-split-moodboard">
+            {grid}
+            <div className="doc-split-text">
+              {intro}
+              {swatches}
+            </div>
+          </div>
+        ) : (
+          <>
+            {intro}
+            {grid}
+            {swatches}
+          </>
+        );
       break;
     }
     case "doc-closing": {
@@ -419,6 +481,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       ref={ref}
       className={`smp-slide smp-doc doc-${chrome} smp-layout-${slide.layout}`}
       data-shape="a4"
+      data-orientation={landscape ? "landscape" : "portrait"}
       data-ground={slide.ground}
       style={{ width: format.width, height: format.height }}
     >

@@ -15,6 +15,8 @@ export type Format = {
   /** LinkedIn carousels are uploaded as a PDF document; everything else as images. */
   primaryExport: "pdf" | "png";
   hint: string;
+  /** Landscape A4 documents: the id of the same document in portrait. */
+  landscapeOf?: string;
 };
 
 export const FORMATS: Format[] = [
@@ -189,14 +191,30 @@ export const FORMATS: Format[] = [
   },
 ];
 
+export const isDocument = (f: Format) => f.shape === "a4";
+export const isLandscape = (f: Format) => f.width > f.height;
+
+// Every A4 document also exists in landscape (1123 × 794), as « <id>-landscape »: the same pages, with
+// the photos beside the text. The pickers list the portrait ones and offer the orientation next to them.
+export const LANDSCAPE_DOCUMENTS: Format[] = FORMATS.filter(isDocument).map((f) => ({ ...f, id: `${f.id}-landscape`, width: f.height, height: f.width, landscapeOf: f.id }));
+
+/** Every format, landscape documents included. */
+export const ALL_FORMATS: Format[] = [...FORMATS, ...LANDSCAPE_DOCUMENTS];
+
 export function getFormat(id: string): Format {
-  return FORMATS.find((f) => f.id === id) ?? FORMATS[0];
+  return ALL_FORMATS.find((f) => f.id === id) ?? FORMATS[0];
+}
+
+/** The same A4 document in portrait or in landscape; social formats have a single shape. */
+export function withOrientation(f: Format, landscape: boolean): Format {
+  if (!isDocument(f)) return f;
+  const portrait = f.landscapeOf ?? f.id;
+  return getFormat(landscape ? `${portrait}-landscape` : portrait);
 }
 
 export const PLATFORMS = ["LinkedIn", "Instagram", "Facebook", "Document"] as const;
 
-export const isDocument = (f: Format) => f.shape === "a4";
-/** « LinkedIn carousel », « Instagram story », « Client document · A4 PDF ». */
-export const formatLabel = (f: Format) => (isDocument(f) ? `${f.name} · A4 PDF` : `${f.platform} ${f.name.toLowerCase()}`);
+/** « LinkedIn carousel », « Instagram story », « Client document · A4 PDF », « Guide · A4 landscape PDF ». */
+export const formatLabel = (f: Format) => (isDocument(f) ? `${f.name} · A4 ${isLandscape(f) ? "landscape " : ""}PDF` : `${f.platform} ${f.name.toLowerCase()}`);
 /** What the parts of an asset are called: slides for social formats, pages for documents. */
 export const unitName = (f: Format, plural = false) => (isDocument(f) ? (plural ? "pages" : "page") : plural ? "slides" : "slide");

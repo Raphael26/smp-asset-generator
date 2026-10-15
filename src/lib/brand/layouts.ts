@@ -305,6 +305,8 @@ export function imageFrame(layout: LayoutId, format: Format): { width: number; h
   if (shape === "a4") {
     // Pages have 64px margins; generated photos are sized at twice the page size for a crisp print.
     if (kind === "gallery") return galleryFrame();
+    // Landscape pages put the photo in one half of the page, beside the text, from the header to the footer.
+    if (width > height) return { width: Math.round((width - 128 - 48) / 2) * 2, height: (height - 170) * 2 };
     if (layout === "doc-cover") return { width: (width - 128) * 2, height: 400 * 2 };
     return { width: (width - 128) * 2, height: 460 * 2 };
   }
@@ -428,7 +430,7 @@ export const DOCUMENT_STARTERS: Record<string, Starter[]> = {
 };
 
 export function startersFor(format: Format): Starter[] {
-  if (format.shape === "a4") return DOCUMENT_STARTERS[format.id] ?? DOCUMENT_STARTERS["doc-guide"];
+  if (format.shape === "a4") return DOCUMENT_STARTERS[format.landscapeOf ?? format.id] ?? DOCUMENT_STARTERS["doc-guide"];
   return format.multi ? CAROUSEL_STARTERS : SINGLE_STARTERS;
 }
 

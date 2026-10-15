@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Asset } from "@/lib/db/schema";
-import { getFormat } from "@/lib/brand/formats";
+import { getFormat, isLandscape } from "@/lib/brand/formats";
 import { Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
 import { api, relativeTime } from "@/components/ui/api";
@@ -61,7 +61,7 @@ export function ExportDialog({
 
   const options: { kind: "png" | "pdf" | "zip"; slide: number | null; label: string; detail: string; primary?: boolean }[] = [];
   if (format.shape === "a4") {
-    options.push({ kind: "pdf", slide: null, label: "PDF document", detail: `A4, ${total} page${total > 1 ? "s" : ""}, with selectable text and clickable links. Ready to e-mail or print.`, primary: true });
+    options.push({ kind: "pdf", slide: null, label: "PDF document", detail: `A4${isLandscape(format) ? " landscape" : ""}, ${total} page${total > 1 ? "s" : ""}, with selectable text and clickable links. Ready to e-mail or print.`, primary: true });
     options.push({ kind: "zip", slide: null, label: "Pages as images", detail: "A ZIP with each page as a PNG (to post on social media) and the PDF." });
   } else if (format.id === "linkedin-carousel") {
     options.push({ kind: "pdf", slide: null, label: "PDF for LinkedIn", detail: `One page per slide, ${total} pages. Upload it as a document.`, primary: true });
