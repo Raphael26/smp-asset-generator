@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { Issue } from "@/lib/brand/lint";
-import { getFormat } from "@/lib/brand/formats";
+import { getFormat, unitName } from "@/lib/brand/formats";
 import { getLayout } from "@/lib/brand/layouts";
 import { ScaledSlide, previewUrl } from "@/components/slides/ScaledSlide";
 import { Icon } from "@/components/ui/Icon";
@@ -52,6 +52,7 @@ export function Stage({
             options={asset.content.options}
             mediaUrl={previewUrl(1600)}
             placeholders
+            title={asset.title}
             onFit={(r) => onFit(slide.id, r.overflow)}
             className="shadow-[0_18px_50px_-24px_rgba(48,43,39,.45)]"
           />
@@ -60,16 +61,16 @@ export function Stage({
       <div className="flex min-h-[64px] items-start justify-between gap-6 border-t border-line bg-paper/70 px-6 py-3">
         <div className="flex items-center gap-2 pt-1">
           {total > 1 && (
-            <button className="btn btn-ghost btn-sm" disabled={current === 0} onClick={() => setCurrent(current - 1)} aria-label="Previous slide">
+            <button className="btn btn-ghost btn-sm" disabled={current === 0} onClick={() => setCurrent(current - 1)} aria-label={`Previous ${unitName(format)}`}>
               <Icon name="chevronLeft" size={16} />
             </button>
           )}
           <span className="text-[12.5px] text-ink-soft">
-            {total > 1 ? `Slide ${current + 1} of ${total} · ` : ""}
-            {slide ? getLayout(slide.layout).name : ""} · {format.width} × {format.height}
+            {total > 1 ? `${unitName(format) === "page" ? "Page" : "Slide"} ${current + 1} of ${total} · ` : ""}
+            {slide ? getLayout(slide.layout).name : ""} · {format.shape === "a4" ? "A4" : `${format.width} × ${format.height}`}
           </span>
           {total > 1 && (
-            <button className="btn btn-ghost btn-sm" disabled={current === total - 1} onClick={() => setCurrent(current + 1)} aria-label="Next slide">
+            <button className="btn btn-ghost btn-sm" disabled={current === total - 1} onClick={() => setCurrent(current + 1)} aria-label={`Next ${unitName(format)}`}>
               <Icon name="chevronRight" size={16} />
             </button>
           )}

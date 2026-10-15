@@ -4,7 +4,7 @@ import { db, schema } from "@/lib/db";
 import type { Asset, CreateOptions } from "@/lib/db/schema";
 import { DEFAULT_OPTIONS, type AssetContent } from "@/lib/content";
 import { getFormat } from "@/lib/brand/formats";
-import { CAROUSEL_STARTERS, SINGLE_STARTERS, slidesFromStarter } from "@/lib/brand/layouts";
+import { slidesFromStarter, startersFor } from "@/lib/brand/layouts";
 import { UserFacingError } from "@/lib/errors";
 
 export function getAsset(id: string): Asset {
@@ -32,12 +32,12 @@ export function listAssets(filter: { q?: string; formatId?: string; universe?: s
 
 export function createAsset(input: { title: string; formatId: string; universe: string | null; starterId: string }): Asset {
   const format = getFormat(input.formatId);
-  const starters = format.multi ? CAROUSEL_STARTERS : SINGLE_STARTERS;
+  const starters = startersFor(format);
   const starter = starters.find((s) => s.id === input.starterId) ?? starters[0];
   const content: AssetContent = {
     slides: slidesFromStarter(starter),
     caption: "",
-    options: { ...DEFAULT_OPTIONS, universeTag: Boolean(input.universe) && format.multi },
+    options: { ...DEFAULT_OPTIONS, universeTag: Boolean(input.universe) && format.multi && format.shape !== "a4" },
   };
   const id = nanoid(10);
   db.insert(schema.assets)
@@ -134,12 +134,20 @@ export function createAssetFromContent(input: {
  * Puts a finished generated photo into its slide (mediaId null: the generation failed, just clear
  * the pending state). Leaves the slide alone if Rebeca has meanwhile chosen another photo.
  */
-export function placePhoto(assetId: string, slideId: string, jobId: string, mediaId: string | null) {
+export function placePhoto(assetId: string, slideId: string, jobId: string, mediaId: string | null, galleryIndex?: number) {
   const a = db.select().from(schema.assets).where(eq(schema.assets.id, assetId)).get();
   if (!a) return;
   let changed = false;
   const slides = a.content.slides.map((s) => {
     if (s.id !== slideId) return s;
+    if (galleryIndex !== undefined) {
+      const gallery = [...(s.gallery ?? [])];
+      const cell = gallery[galleryIndex];
+      if (!cell || (cell.photoJob !== jobId && cell.image)) return s;
+      gallery[galleryIndex] = { ...cell, photoJob: null, image: mediaId ? { mediaId, focusX: 50, focusY: 50, zoom: 1 } : cell.image };
+      changed = true;
+      return { ...s, gallery };
+    }
     if (s.photoJob !== jobId && s.image) return s;
     changed = true;
     return { ...s, photoJob: null, image: mediaId ? { mediaId, focusX: 50, focusY: 40, zoom: 1 } : s.image };
@@ -148,11 +156,20 @@ export function placePhoto(assetId: string, slideId: string, jobId: string, medi
 }
 
 /** Marks slides as waiting for a photo (the editor shows a placeholder until it arrives). */
-export function setPhotoJobs(assetId: string, jobs: { slideId: string; jobId: string; prompt: string }[]) {
+export function setPhotoJobs(assetId: string, jobs: { slideId: string; jobId: string; prompt: string; galleryIndex?: number }[]) {
   const a = getAsset(assetId);
   const slides = a.content.slides.map((s) => {
-    const j = jobs.find((x) => x.slideId === s.id);
-    return j ? { ...s, photoJob: j.jobId, photoPrompt: j.prompt } : s;
+    let next = s;
+    for (const j of jobs.filter((x) => x.slideId === s.id)) {
+      if (j.galleryIndex === undefined) next = { ...next, photoJob: j.jobId, photoPrompt: j.prompt };
+      else {
+        const gallery = [...(next.gallery ?? [])];
+        while (gallery.length <= j.galleryIndex) gallery.push({ image: null });
+        gallery[j.galleryIndex] = { ...gallery[j.galleryIndex], photoJob: j.jobId, photoPrompt: j.prompt };
+        next = { ...next, gallery };
+      }
+    }
+    return next;
   });
   db.update(schema.assets).set({ content: { ...a.content, slides } }).where(eq(schema.assets.id, assetId)).run();
 }

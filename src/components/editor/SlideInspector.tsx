@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import type { Media } from "@/lib/db/schema";
 import type { LayoutId, Slide } from "@/lib/content";
-import { LAYOUTS, getLayout, newSlide } from "@/lib/brand/layouts";
+import { MAX_GALLERY, getLayout, layoutsFor, newSlide } from "@/lib/brand/layouts";
+import type { Format } from "@/lib/brand/formats";
 import { GROUNDS } from "@/lib/brand/tokens";
 import { FieldInput } from "./FieldInput";
 import { Icon } from "@/components/ui/Icon";
@@ -14,6 +16,9 @@ export function SlideInspector({
   onChange,
   onPickImage,
   onNewPhoto,
+  format,
+  onPickGallery,
+  onNewGalleryPhoto,
 }: {
   slide: Slide;
   index: number;
@@ -22,9 +27,16 @@ export function SlideInspector({
   onPickImage: () => void;
   /** Generate a new photo for this slide from a prompt (Claude's, possibly edited). */
   onNewPhoto: (prompt: string) => void;
+  format: Format;
+  /** Open the picker to add photos to the moodboard. */
+  onPickGallery: () => void;
+  /** Generate the photo Claude described for one cell of the moodboard. */
+  onNewGalleryPhoto: (index: number, prompt: string) => void;
 }) {
   const def = getLayout(slide.layout);
   const image = slide.image ? media.find((m) => m.id === slide.image!.mediaId) : null;
+  // A photo Claude described but nobody generated yet: show its prompt and button straight away.
+  const [promptOpen] = useState(() => !slide.image && !slide.photoJob);
 
   const changeLayout = (layout: LayoutId) => {
     if (layout === slide.layout) return;
@@ -34,7 +46,8 @@ export function SlideInspector({
     for (const k of Object.keys(fields)) if (slide.fields[k]?.trim()) fields[k] = slide.fields[k];
     if (!fields.body && slide.fields.text && "body" in fields) fields.body = slide.fields.text;
     if (!fields.text && slide.fields.body && "text" in fields) fields.text = slide.fields.body;
-    onChange({ ...slide, layout, fields, image: getLayout(layout).image === "none" ? null : slide.image });
+    const kind = getLayout(layout).image;
+    onChange({ ...slide, layout, fields, image: kind === "none" || kind === "gallery" ? null : slide.image, gallery: kind === "gallery" ? (slide.gallery ?? []) : slide.gallery });
   };
 
   const setImage = (patch: Partial<NonNullable<Slide["image"]>>) => slide.image && onChange({ ...slide, image: { ...slide.image, ...patch } });
@@ -44,7 +57,7 @@ export function SlideInspector({
       <section>
         <p className="label">Template</p>
         <div className="grid grid-cols-2 gap-1.5">
-          {LAYOUTS.map((l) => (
+          {layoutsFor(format).map((l) => (
             <button
               key={l.id}
               onClick={() => changeLayout(l.id)}
@@ -75,9 +88,51 @@ export function SlideInspector({
         </div>
       </section>
 
-      {def.image === "required" && (
+      {def.image === "gallery" && (
         <section>
-          <p className="label">Photo</p>
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <p className="label mb-0">Moodboard photos</p>
+            <span className="text-[11px] text-muted tabular-nums">
+              {(slide.gallery ?? []).length}/{MAX_GALLERY}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {(slide.gallery ?? []).map((g, gi) => (
+              <div key={gi} className="group relative aspect-square border border-line bg-stone">
+                {g.image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`/api/media/${g.image.mediaId}/file?w=240`} alt="" className="h-full w-full object-cover" />
+                ) : g.photoJob ? (
+                  <span className="anim-pulse flex h-full items-center justify-center p-1 text-center text-[11px] text-taupe">Generating…</span>
+                ) : g.photoPrompt ? (
+                  <button className="flex h-full w-full flex-col items-center justify-center gap-1 p-1 text-center text-[11px] text-ink-soft hover:bg-cream" title={g.photoPrompt} onClick={() => onNewGalleryPhoto(gi, g.photoPrompt ?? "")}>
+                    <Icon name="wand" size={14} />
+                    Generate this photo · $0.10
+                  </button>
+                ) : null}
+                <button
+                  className="absolute top-1 right-1 flex h-6 w-6 items-center justify-center bg-paper/90 text-taupe opacity-0 group-hover:opacity-100 hover:text-ink"
+                  title="Remove"
+                  onClick={() => onChange({ ...slide, gallery: (slide.gallery ?? []).filter((_, j) => j !== gi) })}
+                >
+                  <Icon name="close" size={12} />
+                </button>
+              </div>
+            ))}
+            {(slide.gallery ?? []).length < MAX_GALLERY && (
+              <button onClick={onPickGallery} className="flex aspect-square flex-col items-center justify-center gap-1 border border-dashed border-rule text-[11.5px] text-ink-soft hover:bg-cream">
+                <Icon name="plus" size={16} />
+                Add a photo
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-[11.5px] text-muted">Two columns; with three or five photos, the first one is tall.</p>
+        </section>
+      )}
+
+      {(def.image === "required" || def.image === "optional") && (
+        <section>
+          <p className="label">Photo{def.image === "optional" && <span className="ml-1.5 font-normal tracking-normal normal-case text-muted">optional</span>}</p>
           {slide.photoJob && (
             <p className="anim-pulse mb-3 border border-line bg-cream px-3 py-2.5 text-[12.5px] text-taupe">Generating the photo… it appears in the slide in about 30 seconds.</p>
           )}
@@ -131,7 +186,7 @@ export function SlideInspector({
             </button>
           )}
           {slide.photoPrompt && (
-            <details className="mt-3 border-t border-line pt-3">
+            <details className="mt-3 border-t border-line pt-3" open={promptOpen}>
               <summary className="cursor-pointer text-[12.5px] text-taupe">Photo prompt</summary>
               <textarea
                 className="field mt-2 text-[12.5px]"
@@ -140,7 +195,7 @@ export function SlideInspector({
                 onChange={(e) => onChange({ ...slide, photoPrompt: e.target.value })}
               />
               <button className="btn btn-outline btn-sm mt-2" disabled={Boolean(slide.photoJob)} onClick={() => onNewPhoto(slide.photoPrompt ?? "")}>
-                <Icon name="wand" size={14} /> New photo from this prompt · $0.10
+                <Icon name="wand" size={14} /> {slide.image ? "New photo from this prompt" : "Generate this photo"} · $0.10
               </button>
             </details>
           )}

@@ -87,14 +87,26 @@ export function describeAsset(asset: Asset, onlySlide: number | null): string {
   asset.content.slides.forEach((slide, i) => {
     if (onlySlide !== null && i !== onlySlide) return;
     const def = getLayout(slide.layout);
-    lines.push(`Slide ${i + 1} — template « ${def.name} »: ${def.description}`);
+    lines.push(`${format.shape === "a4" ? "Page" : "Slide"} ${i + 1} — template ${def.id} « ${def.name} »: ${def.description}`);
     for (const f of def.fields) {
-      const limit = f.kind === "list" ? `max ${f.max} items, one per line` : `max ${f.max} characters`;
-      const kind = f.kind === "title" ? "title (Fraunces display; *italic* allowed; Enter = line break)" : f.kind === "text" ? "paragraph" : f.kind === "list" ? "list" : "single line";
+      const limit = f.kind === "list" ? `max ${f.max} items, one per line` : f.kind === "table" ? `max ${f.max} rows, cells separated by |` : `max ${f.max} characters`;
+      const kind =
+        f.kind === "title"
+          ? "title (Fraunces display; *italic* allowed; Enter = line break)"
+          : f.kind === "text"
+            ? "paragraph"
+            : f.kind === "rich"
+              ? "rich text (## subheadings, - bullets, 1. steps)"
+              : f.kind === "table"
+                ? "table"
+                : f.kind === "list"
+                  ? "list"
+                  : "single line";
       lines.push(`  - ${f.key} · ${f.label} · ${kind} · ${limit}${f.optional ? " · optional" : " · required"}: ${JSON.stringify(slide.fields[f.key] ?? "")}`);
     }
     if (slide.image) lines.push(`  photo: yes${slide.photoPrompt ? ` (generated from: ${JSON.stringify(slide.photoPrompt)})` : ""}`);
     else if (slide.photoJob) lines.push("  photo: being generated");
+    if (slide.gallery?.length) lines.push(`  moodboard gallery: ${slide.gallery.length} photo${slide.gallery.length > 1 ? "s" : ""}${slide.gallery.some((g) => g.photoJob) ? " (some being generated)" : ""}`);
   });
   return lines.join("\n");
 }
@@ -157,15 +169,17 @@ const PLATFORM_CAPTION: Record<string, string> = {
   Instagram:
     "Instagram caption: a strong first line, then short lines, 300 to 900 characters. End with « Lien en bio » or an invitation to write to her. Up to five relevant hashtags at the end.",
   Facebook: "Facebook post: two or three short paragraphs, 300 to 800 characters, ending with a quiet invitation and spanishmuminparis.com. No hashtags needed.",
+  Document:
+    "Message to send with the PDF document. For a client or a company: a short, warm e-mail in « vous » (greeting, what the document contains, the next step, signed « Rebeca »), 400 to 900 characters, no hashtags. For a guide or an offer sheet meant for everyone: a post announcing it (a hook, what is inside, how to get it), 400 to 900 characters, at most three hashtags.",
 };
 
 export async function writeCaption(asset: Asset, mode: "write" | "improve", instruction: string) {
   const format = getFormat(asset.formatId);
   const user = [
     mode === "improve"
-      ? "Rebeca wrote the caption below for her post. Improve it in her voice, keeping her meaning and her words where you can."
-      : "Write the caption (the post text) Rebeca will publish with this visual, in her voice, from what the slides say. Do not add facts that are not on the slides.",
-    PLATFORM_CAPTION[format.platform],
+      ? "Rebeca wrote the caption below. Improve it in her voice, keeping her meaning and her words where you can."
+      : "Write the caption (the text published or sent with this visual or document) in Rebeca’s voice, from what the slides or pages say. Do not add facts that are not on them.",
+    PLATFORM_CAPTION[format.platform] ?? PLATFORM_CAPTION.LinkedIn,
     "Captions use plain text: no *asterisks*, no emoji.",
     instruction.trim() ? `Her request: ${instruction.trim()}` : "",
     "",

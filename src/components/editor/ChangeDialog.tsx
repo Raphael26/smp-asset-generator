@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { AssetContent } from "@/lib/content";
 import { getFormat } from "@/lib/brand/formats";
 import { Modal } from "@/components/ui/Modal";
 import { ScaledSlide, previewUrl } from "@/components/slides/ScaledSlide";
 import { usd } from "@/components/ui/api";
+import { Switch } from "@/components/ui/Switch";
 
 export type Proposal = { title: string; formatId: string; universe: string | null; content: AssetContent; notes: string[]; generate: { slideId: string; prompt: string }[] };
 
@@ -47,17 +49,24 @@ export function ChangeDialog({
   mode,
   onApply,
   photosEnabled,
+  autoPhotos,
 }: {
   open: boolean;
   onClose: () => void;
   asset: Asset;
   proposal: Proposal;
   mode: "edit" | "regenerate";
-  onApply: () => void;
+  /** Whether to start the photos Claude described once the change is applied. */
+  onApply: (generatePhotos: boolean) => void;
   /** False when the Replicate key is missing: photos stay as prompts. */
   photosEnabled: boolean;
+  /** Rebeca's default for generating photos right away (Settings › autoPhotos). */
+  autoPhotos: boolean;
 }) {
-  const generating = new Set(photosEnabled ? proposal.generate.map((g) => g.slideId) : []);
+  const [generatePhotos, setGeneratePhotos] = useState(autoPhotos);
+  const count = proposal.generate.length;
+  const willGenerate = photosEnabled && generatePhotos && count > 0;
+  const generating = new Set(willGenerate ? proposal.generate.map((g) => g.slideId) : []);
   const captionChanged = proposal.content.caption.trim() !== asset.content.caption.trim();
   return (
     <Modal
@@ -71,8 +80,8 @@ export function ChangeDialog({
           <button className="btn btn-ghost" onClick={onClose}>
             Discard
           </button>
-          <button className="btn btn-solid" onClick={onApply}>
-            Apply{photosEnabled && proposal.generate.length ? ` and generate ${proposal.generate.length} photo${proposal.generate.length > 1 ? "s" : ""}` : ""}
+          <button className="btn btn-solid" onClick={() => onApply(willGenerate)}>
+            Apply{willGenerate ? ` and generate ${count} photo${count > 1 ? "s" : ""}` : ""}
           </button>
         </>
       }
@@ -98,15 +107,22 @@ export function ChangeDialog({
             </div>
           </div>
         )}
-        {proposal.generate.length > 0 && !photosEnabled && (
+        {count > 0 && !photosEnabled && (
           <p className="text-[12.5px] text-flag">
-            {proposal.generate.length} photo{proposal.generate.length > 1 ? "s" : ""} described by Claude can’t be generated: the Replicate key is missing. The prompts are kept on the slides.
+            {count} photo{count > 1 ? "s" : ""} described by Claude can’t be generated: the Replicate key is missing. The prompts are kept on the slides.
           </p>
         )}
-        {proposal.generate.length > 0 && photosEnabled && (
-          <p className="text-[12.5px] text-muted">
-            {proposal.generate.length} new photo{proposal.generate.length > 1 ? "s" : ""} will be generated after you apply (about {usd(0.1 * proposal.generate.length)}), and appear in their slides within a minute. The current version is kept in the history.
-          </p>
+        {count > 0 && photosEnabled && (
+          <div className="flex flex-col gap-1.5">
+            <Switch checked={generatePhotos} onChange={setGeneratePhotos}>
+              Generate the {count} new photo{count > 1 ? "s" : ""} now
+            </Switch>
+            <p className="text-[12.5px] text-muted">
+              {generatePhotos
+                ? `${count > 1 ? "They are" : "It is"} generated after you apply (about ${usd(0.1 * count)}) and appear${count > 1 ? "" : "s"} in ${count > 1 ? "their slides" : "its slide"} within a minute. The current version is kept in the history.`
+                : `The prompt${count > 1 ? "s are" : " is"} kept on ${count > 1 ? "their slides" : "its slide"}: generate ${count > 1 ? "each one" : "it"} from the slide when you want ($0.10 each). The current version is kept in the history.`}
+            </p>
+          </div>
         )}
       </div>
     </Modal>

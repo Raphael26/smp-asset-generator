@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { AssetOptions, LogoMode } from "@/lib/content";
-import { getFormat } from "@/lib/brand/formats";
+import { formatLabel, getFormat } from "@/lib/brand/formats";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { STATUS_OPTIONS } from "@/components/studio/StatusBadge";
 import { Icon } from "@/components/ui/Icon";
@@ -50,7 +50,7 @@ export function PostInspector({
         </label>
         <input id="asset-title" className="field" value={asset.title} onChange={(e) => onChange({ title: e.target.value })} />
         <p className="mt-1.5 text-[11.5px] text-muted">
-          {format.platform} {format.name.toLowerCase()} · {format.width} × {format.height}
+          {formatLabel(format)}{format.shape === "a4" ? "" : ` · ${format.width} × ${format.height}`}
         </p>
       </section>
 
@@ -114,7 +114,7 @@ export function PostInspector({
       <section>
         <div className="mb-1.5 flex items-baseline justify-between">
           <label className="label mb-0" htmlFor="caption">
-            Caption
+            {format.shape === "a4" ? "Message to send with it" : "Caption"}
           </label>
           <span className="text-[11px] text-muted tabular-nums">{caption.length} characters</span>
         </div>
@@ -122,7 +122,11 @@ export function PostInspector({
           id="caption"
           className="field"
           rows={Math.min(14, Math.max(5, caption.split("\n").length + 1))}
-          placeholder={`The text published with the visual on ${format.platform}. Write it yourself, or ask Claude for a first draft.`}
+          placeholder={
+            format.shape === "a4"
+              ? "The e-mail to the client, or the post announcing the guide. Write it yourself, or ask Claude for a first draft."
+              : `The text published with the visual on ${format.platform}. Write it yourself, or ask Claude for a first draft.`
+          }
           value={caption}
           onChange={(e) => setCaption(e.target.value)}
         />

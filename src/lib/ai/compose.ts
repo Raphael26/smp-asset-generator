@@ -3,14 +3,16 @@
 // text in the brand fonts and Flux generates the photos. Text is never drawn by an image model.
 import { z } from "zod";
 import type { Asset, CreateOptions, Media } from "@/lib/db/schema";
-import { DEFAULT_OPTIONS, type AssetContent, type GroundId, type LayoutId, type Slide } from "@/lib/content";
-import { FORMATS, getFormat, type Format } from "@/lib/brand/formats";
-import { LAYOUTS, getLayout, newSlide } from "@/lib/brand/layouts";
+import { DEFAULT_OPTIONS, type AssetContent, type GalleryItem, type GroundId, type ImageRef, type LayoutId, type Slide } from "@/lib/content";
+import { FORMATS, getFormat, isDocument, type Format } from "@/lib/brand/formats";
+import { LAYOUTS, MAX_GALLERY, equivalentLayout, getLayout, newSlide } from "@/lib/brand/layouts";
 import { GROUNDS, UNIVERSES } from "@/lib/brand/tokens";
 import { PHOTO_BRIEF } from "@/lib/brand/voice";
 import { describeAsset, structured } from "@/lib/ai/claude";
 
+/** Generated photos per request: a few for a social visual, more for a document with a moodboard. */
 export const MAX_GENERATED_PHOTOS = 4;
+export const MAX_GENERATED_PHOTOS_DOCUMENT = 6;
 
 // ——— The guide: everything Claude needs to know about the studio, built from the code so it never drifts ———
 
@@ -22,13 +24,28 @@ function buildGuide(): string {
   l.push("## Formats");
   for (const f of FORMATS) l.push(`- ${f.id}: ${f.platform} ${f.name.toLowerCase()}, ${f.width}×${f.height}, ${f.multi ? `carousel of up to ${f.maxSlides} slides` : "a single image (exactly one slide)"}. ${f.hint}`);
   l.push("");
-  l.push("## Templates (each slide uses one)");
+  const photoNote = (t: (typeof LAYOUTS)[number]) =>
+    t.image === "required" ? " Has a photo (required)." : t.image === "optional" ? " Can have a photo." : t.image === "gallery" ? ` Has a gallery of up to ${MAX_GALLERY} photos.` : "";
+  const forKind = (t: (typeof LAYOUTS)[number]) => (t.kind === "both" ? "social formats and documents" : t.kind === "document" ? "A4 documents only" : "social formats only");
+  l.push("## Templates (each slide or page uses one)");
   for (const t of LAYOUTS) {
-    l.push(`### ${t.id} — ${t.name}: ${t.description}${t.image === "required" ? " The only template with a photo." : ""}`);
+    l.push(`### ${t.id} — ${t.name} (${forKind(t)}): ${t.description}${photoNote(t)}`);
     for (const f of t.fields) {
       const limit = f.kind === "list" ? `max ${f.max} items, one per line` : `max ${f.max} characters`;
-      const kind = f.kind === "title" ? "title (*italic* allowed, \\n for a line break)" : f.kind === "text" ? "paragraph (*italic*, **bold** allowed)" : f.kind === "list" ? "list" : "single line";
-      l.push(`- ${f.key}: ${f.label}, ${kind}, ${limit}, ${f.optional ? "optional" : "required"}. Example: ${JSON.stringify(f.placeholder)}${f.help ? `. ${f.help}` : ""}`);
+      const kind =
+        f.kind === "title"
+          ? "title (*italic* allowed, \\n for a line break)"
+          : f.kind === "text"
+            ? "paragraph (*italic*, **bold** allowed)"
+            : f.kind === "rich"
+              ? "rich text (paragraphs, « ## » subheadings, « - » bullets, « 1. » steps, *italic*, **bold**)"
+              : f.kind === "table"
+                ? "table (one row per line, cells separated by « | », header row first)"
+                : f.kind === "list"
+                  ? "list"
+                  : "single line";
+      const lim = f.kind === "table" ? `max ${f.max} rows` : limit;
+      l.push(`- ${f.key}: ${f.label}, ${kind}, ${lim}, ${f.optional ? "optional" : "required"}. Example: ${JSON.stringify(f.placeholder)}${f.help ? `. ${f.help}` : ""}`);
     }
   }
   l.push("");
@@ -42,6 +59,7 @@ function buildGuide(): string {
   l.push("## How to compose");
   l.push("- Carousel: 4 to 8 slides unless she asks otherwise. Slide 1 hooks the reader (a title, or a key figure when she gave a striking sourced figure). One idea per slide. The last slide is the closing template (cta) on the band ground. Alternate cream and paper grounds for rhythm.");
   l.push("- Single post or story: exactly one slide, in the template that carries the message best.");
+  l.push("- Social formats use only social templates (and quote); A4 documents use only document pages (doc-…) and quote.");
   l.push("- Eyebrows: a short noun phrase, usually the same on every slide of a carousel (for example the theme, or « 01 — Décoration »).");
   l.push("- Titles: one *italic* phrase for the warm or emotional words, ending with a full stop (questions keep their question mark).");
   l.push("- Her own words come first: when she gives wording, keep it verbatim where it fits; only fix typos and fit it to the limits. When she gives a topic, write the copy yourself, in her voice.");
@@ -51,10 +69,20 @@ function buildGuide(): string {
   l.push("- Title of the asset: a short working title in French for her library.");
   l.push("- Notes: two to five short notes in English for Rebeca: the choices you made, and anything she should check or provide.");
   l.push("");
+  l.push("## A4 documents (exported as PDF)");
+  l.push("- Pages, not slides: a text page holds about 1 800 characters; spread longer content over several pages rather than cramming. One subject per page, with a title.");
+  l.push("- Guide (doc-guide): a cover (often with a photo), an introduction page, three to six pages of advice (text or photo pages, one idea each), often a checklist, then the closing page. Five to ten pages.");
+  l.push("- Client document (doc-client): for one client she names, written to them (« vous »), with « Préparé pour … » on the cover. Moodboard pages (gallery, palette, materials), shopping lists (table: piece | shop | price | link), the Home Routine planning (table of days and moments, or checklists), advice pages, the closing page. Never invent products, shops, prices or links: write « à compléter » in a cell she did not give.");
+  l.push("- Offer sheet (doc-offer): one to three pages: an optional cover, one offer page per formula with the exact names and prices, the closing page.");
+  l.push("- Corporate proposal (doc-proposal): « Préparé pour » the company on the cover, a context page (what is at stake for them), a key-figures page (only figures she gave, each with its source), the programme of the Home & Life Balance workshop, an offer page (price « Sur devis » unless she gives one), The Home Balance Toolkit if relevant, the closing page.");
+  l.push("- Tables: three to five columns, at most fifteen rows. Checklists: short items to tick.");
+  l.push("- Moodboard: four to six photos in its gallery, the palette as the project's hex colours, the main materials.");
+  l.push("- Caption for a document: the short message to send with the PDF (an e-mail to the client, or a post announcing the guide), plain text.");
+  l.push("");
   l.push("## Photos");
-  l.push("Only the photo template shows a photo; for every other template set photo.source to « none ».");
+  l.push("Templates with a photo: photo, doc-photo (required) and doc-cover (optional). For the others set photo.source to « none ». The moodboard uses its gallery (a list of photos with the same sources); every other template has an empty gallery.");
   l.push("- « library »: one of her images listed in the request, by its id. Real photos of Rebeca are the brand's strongest images: use them for personal topics, her story, her work.");
-  l.push(`- « generate »: write an English prompt for Flux 2 (60 to 120 words: the scene, the light, the materials, the camera; end with « no people, no text, no logos »). At most ${MAX_GENERATED_PHOTOS} per visual.`);
+  l.push(`- « generate »: write an English prompt for Flux 2 (60 to 120 words: the scene, the light, the materials, the camera; end with « no people, no text, no logos »). At most ${MAX_GENERATED_PHOTOS} per social visual, ${MAX_GENERATED_PHOTOS_DOCUMENT} per document.`);
   l.push("- « keep »: when editing, keep the slide's current photo.");
   l.push(PHOTO_BRIEF);
   return l.join("\n");
@@ -70,16 +98,19 @@ const LAYOUT_IDS = ids(LAYOUTS.map((t) => t.id));
 const GROUND_IDS = ids(GROUNDS.map((g) => g.id));
 const UNIVERSE_IDS = ids([...UNIVERSES.map((u) => u.id), "none"]);
 
+const PhotoOut = z.object({
+  source: z.enum(["none", "keep", "library", "generate"]),
+  mediaId: z.string().nullable(),
+  prompt: z.string().nullable().describe("English prompt for Flux 2 when source is generate"),
+});
+
 const SlideOut = z.object({
   basedOn: z.number().int().nullable().describe("When editing: the number of the current slide this one comes from, or null for a new slide"),
   layout: z.enum(LAYOUT_IDS),
   ground: z.enum(GROUND_IDS),
   fields: z.array(z.object({ key: z.string(), value: z.string() })),
-  photo: z.object({
-    source: z.enum(["none", "keep", "library", "generate"]),
-    mediaId: z.string().nullable(),
-    prompt: z.string().nullable().describe("English prompt for Flux 2 when source is generate"),
-  }),
+  photo: PhotoOut,
+  gallery: z.array(PhotoOut).describe("Moodboard photos; empty for every other template"),
 });
 
 const ComposeSchema = z.object({
@@ -97,8 +128,8 @@ export type Proposal = {
   universe: string | null;
   content: AssetContent;
   notes: string[];
-  /** Slides whose photo is to be generated, with the prompt Claude wrote. */
-  generate: { slideId: string; prompt: string }[];
+  /** Photos to generate, with the prompt Claude wrote: a slide's photo, or one cell of a moodboard. */
+  generate: { slideId: string; prompt: string; galleryIndex?: number }[];
 };
 
 // ——— Request helpers ———
@@ -113,7 +144,7 @@ function libraryList(media: Media[]): string {
 function photoRule(images: CreateOptions["images"]): string {
   switch (images) {
     case "none":
-      return "Photos: none. Do not use the photo template.";
+      return "Photos: none. Do not use templates that need a photo (photo, doc-photo, doc-moodboard); covers without a photo.";
     case "library":
       return "Photos: only from her library (photo.source « library »). Never « generate ».";
     case "ai":
@@ -125,32 +156,72 @@ function photoRule(images: CreateOptions["images"]): string {
 
 // ——— Turning Claude's answer into studio content ———
 
+// Field names that carry the same text in another template, used when a slide changes template.
+const ALIASES: Record<string, string[]> = {
+  body: ["text", "subtitle", "description", "intro"],
+  text: ["body", "subtitle", "description", "intro"],
+  subtitle: ["text", "body", "intro"],
+  intro: ["subtitle", "text"],
+  items: ["included", "materials"],
+  included: ["items"],
+  value1: ["value"],
+  text1: ["text"],
+  source1: ["source"],
+  value: ["value1"],
+  source: ["source1"],
+};
+
 function normalize(
   out: z.infer<typeof ComposeSchema>,
   ctx: { format: Format; media: Media[]; existing: Asset | null; images: CreateOptions["images"] },
 ): Proposal {
   const { format, existing } = ctx;
+  const doc = isDocument(format);
+  const maxPhotos = doc ? MAX_GENERATED_PHOTOS_DOCUMENT : MAX_GENERATED_PHOTOS;
   const mediaIds = new Set(ctx.media.map((m) => m.id));
   const notes = [...out.notes];
   let slidesOut = out.slides;
   if (!format.multi && slidesOut.length > 1) slidesOut = slidesOut.slice(0, 1);
   if (slidesOut.length > format.maxSlides) slidesOut = slidesOut.slice(0, format.maxSlides);
-  if (!slidesOut.length) slidesOut = [{ basedOn: null, layout: "cover", ground: "cream", fields: [], photo: { source: "none", mediaId: null, prompt: null } }];
+  const none = { source: "none" as const, mediaId: null, prompt: null };
+  if (!slidesOut.length) slidesOut = [{ basedOn: null, layout: doc ? "doc-cover" : "cover", ground: "cream", fields: [], photo: none, gallery: [] }];
 
   const usedIds = new Set<string>();
   const generate: Proposal["generate"] = [];
+  const canGenerate = ctx.images !== "none" && ctx.images !== "library";
+
+  // Resolves one photo choice; a « generate » is queued and returns null until the photo arrives.
+  const resolve = (p: z.infer<typeof PhotoOut>, slideId: string, galleryIndex: number | undefined, label: string): { image: ImageRef | null; prompt: string | null } => {
+    if (p.source === "library" && p.mediaId && mediaIds.has(p.mediaId)) return { image: { mediaId: p.mediaId, focusX: 50, focusY: 35, zoom: 1 }, prompt: null };
+    if (p.source === "generate" && p.prompt?.trim() && canGenerate) {
+      if (generate.length < maxPhotos) {
+        generate.push({ slideId, prompt: p.prompt.trim(), ...(galleryIndex !== undefined ? { galleryIndex } : {}) });
+        return { image: null, prompt: p.prompt.trim() };
+      }
+      notes.push(`${label} not generated: ${maxPhotos} at most per request.`);
+    }
+    return { image: null, prompt: null };
+  };
+
   const slides: Slide[] = slidesOut.map((s, index) => {
     const base = existing && s.basedOn ? existing.content.slides[s.basedOn - 1] : undefined;
-    // « No photos » means no photo template: such a slide becomes a text point.
-    const noPhoto = ctx.images === "none" && s.layout === "photo";
-    const slide = newSlide(noPhoto ? "text" : (s.layout as LayoutId), s.ground as GroundId);
-    if (noPhoto) s = { ...s, fields: s.fields.map((f) => (f.key === "text" ? { ...f, key: "body" } : f)) };
+    // Social visuals use social templates, documents use pages; « No photos » means no template that needs one.
+    let layout = equivalentLayout(s.layout as LayoutId, doc);
+    if (ctx.images === "none" && (layout === "photo" || layout === "doc-photo")) layout = doc ? "doc-page" : "text";
+    const slide = newSlide(layout, s.ground as GroundId);
     if (base && !usedIds.has(base.id)) slide.id = base.id;
     usedIds.add(slide.id);
     const def = getLayout(slide.layout);
-    for (const f of s.fields) if (def.fields.some((d) => d.key === f.key)) slide.fields[f.key] = f.value.trim();
+    const given = new Map(s.fields.map((f) => [f.key, f.value.trim()]));
+    for (const f of def.fields) {
+      const direct = given.get(f.key);
+      const alias = (ALIASES[f.key] ?? []).map((k) => given.get(k)).find((v) => v);
+      const value = direct || (def.id !== s.layout ? alias : undefined);
+      if (value) slide.fields[f.key] = value;
+    }
+    const unit = doc ? "page" : "slide";
 
-    if (def.image === "required") {
+    if (def.image === "required" || def.image === "optional") {
       const p = s.photo;
       if (p.source === "keep" && base?.image) {
         slide.image = base.image;
@@ -158,14 +229,22 @@ function normalize(
       } else if (p.source === "keep" && base?.photoJob) {
         slide.photoJob = base.photoJob;
         slide.photoPrompt = base.photoPrompt ?? null;
-      } else if (p.source === "library" && p.mediaId && mediaIds.has(p.mediaId)) {
-        slide.image = { mediaId: p.mediaId, focusX: 50, focusY: 35, zoom: 1 };
-      } else if (p.source === "generate" && p.prompt?.trim() && ctx.images !== "none" && ctx.images !== "library") {
-        if (generate.length < MAX_GENERATED_PHOTOS) {
-          slide.photoPrompt = p.prompt.trim();
-          generate.push({ slideId: slide.id, prompt: slide.photoPrompt });
-        } else notes.push(`Photo of slide ${index + 1} not generated: ${MAX_GENERATED_PHOTOS} at most per request.`);
+      } else {
+        const r = resolve(p, slide.id, undefined, `Photo of ${unit} ${index + 1}`);
+        slide.image = r.image;
+        if (r.prompt) slide.photoPrompt = r.prompt;
       }
+    }
+
+    if (def.image === "gallery" && ctx.images !== "none") {
+      const items: GalleryItem[] = [];
+      s.gallery.slice(0, MAX_GALLERY).forEach((g, gi) => {
+        const kept = g.source === "keep" ? base?.gallery?.[gi] : undefined;
+        if (kept) return items.push(kept);
+        const r = resolve(g, slide.id, items.length, `Moodboard photo ${gi + 1} of ${unit} ${index + 1}`);
+        if (r.image || r.prompt) items.push({ image: r.image, photoPrompt: r.prompt });
+      });
+      slide.gallery = items;
     }
     return slide;
   });
@@ -178,7 +257,7 @@ function normalize(
     content: {
       slides,
       caption: out.caption.trim(),
-      options: existing ? existing.content.options : { ...DEFAULT_OPTIONS, universeTag: format.multi && Boolean(universe) },
+      options: existing ? existing.content.options : { ...DEFAULT_OPTIONS, universeTag: format.multi && !doc && Boolean(universe) },
     },
     notes: notes.slice(0, 6),
     generate,

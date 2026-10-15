@@ -13,8 +13,9 @@ export function RenderSlides({ asset, slide }: { asset: Asset; slide: number | n
       <style>{`
         @page { size: ${format.width}px ${format.height}px; margin: 0; }
         html, body { margin: 0; padding: 0; background: transparent; }
-        .render-page { width: ${format.width}px; height: ${format.height}px; overflow: hidden; break-after: page; }
-        .render-page:last-child { break-after: auto; }
+        .render-page { width: ${format.width}px; height: ${format.height}px; overflow: hidden; }
+        /* Page breaks go before each page but the first: Next adds its own elements after the last one. */
+        .render-page + .render-page { break-before: page; }
       `}</style>
       {indexes.map((i) => (
         <div className="render-page" key={slides[i].id}>
@@ -26,6 +27,7 @@ export function RenderSlides({ asset, slide }: { asset: Asset; slide: number | n
             universeId={asset.universe}
             options={asset.content.options}
             mediaUrl={(id) => `/api/media/${id}/file`}
+            title={asset.title}
           />
         </div>
       ))}

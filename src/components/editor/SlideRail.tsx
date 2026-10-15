@@ -3,8 +3,8 @@
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { LayoutId } from "@/lib/content";
-import { getFormat } from "@/lib/brand/formats";
-import { LAYOUTS, getLayout } from "@/lib/brand/layouts";
+import { getFormat, unitName } from "@/lib/brand/formats";
+import { getLayout, layoutsFor } from "@/lib/brand/layouts";
 import { ScaledSlide, previewUrl } from "@/components/slides/ScaledSlide";
 import { Icon } from "@/components/ui/Icon";
 
@@ -43,7 +43,7 @@ export function SlideRail({
               <span className={current === i ? "font-semibold text-ink" : ""}>
                 {i + 1} · {getLayout(s.layout).name}
               </span>
-              {issueCount(i) > 0 && <span className="h-1.5 w-1.5 rounded-full bg-flag" title="Something to fix on this slide" />}
+              {issueCount(i) > 0 && <span className="h-1.5 w-1.5 rounded-full bg-flag" title={`Something to fix on this ${unitName(format)}`} />}
             </div>
             <button
               onClick={() => setCurrent(i)}
@@ -59,6 +59,7 @@ export function SlideRail({
                 options={asset.content.options}
                 mediaUrl={previewUrl(300)}
                 placeholders
+                title={asset.title}
                 onFit={(r) => onFit(s.id, r.overflow)}
               />
             </button>
@@ -79,11 +80,11 @@ export function SlideRail({
         {slides.length < format.maxSlides && (
           <div className="relative">
             <button className="btn btn-outline btn-sm w-full" onClick={() => setMenu((m) => !m)}>
-              <Icon name="plus" size={14} /> Add slide
+              <Icon name="plus" size={14} /> Add {unitName(format)}
             </button>
             {menu && (
-              <div className="anim-rise absolute bottom-10 left-0 z-20 w-[220px] border border-line bg-paper py-1 shadow-[0_12px_30px_-14px_rgba(48,43,39,.4)]">
-                {LAYOUTS.map((l) => (
+              <div className="anim-rise scroll-thin absolute bottom-10 left-0 z-20 max-h-[70vh] w-[220px] overflow-y-auto border border-line bg-paper py-1 shadow-[0_12px_30px_-14px_rgba(48,43,39,.4)]">
+                {layoutsFor(format).map((l) => (
                   <button
                     key={l.id}
                     className="block w-full px-4 py-2 text-left text-[13px] hover:bg-cream"

@@ -1,10 +1,10 @@
 // Output formats. Adding one = adding an entry here (the templates adapt to its shape).
 
-export type Shape = "portrait" | "square" | "story" | "landscape";
+export type Shape = "portrait" | "square" | "story" | "landscape" | "a4";
 
 export type Format = {
   id: string;
-  platform: "LinkedIn" | "Instagram" | "Facebook";
+  platform: "LinkedIn" | "Instagram" | "Facebook" | "Document";
   name: string;
   width: number;
   height: number;
@@ -138,10 +138,65 @@ export const FORMATS: Format[] = [
     primaryExport: "png",
     hint: "Same shape as a link preview.",
   },
+  // A4 documents: 794 × 1123 px is A4 at 96 px per inch; exported as a real PDF (selectable text, clickable links).
+  {
+    id: "doc-guide",
+    platform: "Document",
+    name: "Guide",
+    width: 794,
+    height: 1123,
+    shape: "a4",
+    multi: true,
+    maxSlides: 24,
+    primaryExport: "pdf",
+    hint: "A guide or lead magnet to share as a PDF: tips, steps, a checklist.",
+  },
+  {
+    id: "doc-client",
+    platform: "Document",
+    name: "Client document",
+    width: 794,
+    height: 1123,
+    shape: "a4",
+    multi: true,
+    maxSlides: 24,
+    primaryExport: "pdf",
+    hint: "For one client: moodboard, shopping list, Home Routine planning, Home Manual.",
+  },
+  {
+    id: "doc-offer",
+    platform: "Document",
+    name: "Offer sheet",
+    width: 794,
+    height: 1123,
+    shape: "a4",
+    multi: true,
+    maxSlides: 8,
+    primaryExport: "pdf",
+    hint: "One or two pages presenting a universe or a formula, with prices.",
+  },
+  {
+    id: "doc-proposal",
+    platform: "Document",
+    name: "Corporate proposal",
+    width: 794,
+    height: 1123,
+    shape: "a4",
+    multi: true,
+    maxSlides: 16,
+    primaryExport: "pdf",
+    hint: "For a company: Home & Life Balance workshops, key figures, programme, price.",
+  },
 ];
 
 export function getFormat(id: string): Format {
   return FORMATS.find((f) => f.id === id) ?? FORMATS[0];
 }
 
-export const PLATFORMS = ["LinkedIn", "Instagram", "Facebook"] as const;
+export const PLATFORMS = ["LinkedIn", "Instagram", "Facebook", "Document"] as const;
+
+export const isDocument = (f: Format) => f.shape === "a4";
+/** « LinkedIn carousel », « Instagram story », « Client document · A4 PDF ». */
+export const formatLabel = (f: Format) => (isDocument(f) ? `${f.name} · A4 PDF` : `${f.platform} ${f.name.toLowerCase()}`);
+/** What the parts of an asset are called: slides for social formats, pages for documents. */
+export const unitName = (f: Format, plural = false) => (isDocument(f) ? (plural ? "pages" : "page") : plural ? "slides" : "slide");

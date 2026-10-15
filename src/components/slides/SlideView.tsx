@@ -1,11 +1,14 @@
 "use client";
 
-import { Fragment, useLayoutEffect, useRef, type ReactNode } from "react";
+import { Fragment, useRef, type ReactNode } from "react";
 import type { AssetOptions, Slide } from "@/lib/content";
 import type { Format } from "@/lib/brand/formats";
 import { getLayout } from "@/lib/brand/layouts";
 import { universe as getUniverse } from "@/lib/brand/tokens";
-import { frenchTypo, parseRich, type Paragraph } from "@/lib/brand/typography";
+import { frenchTypo, parseRich } from "@/lib/brand/typography";
+import { useFit } from "./useFit";
+import { Rich, VisioIcon } from "./parts";
+import { DocPage } from "./DocPage";
 
 export type SlideViewProps = {
   format: Format;
@@ -19,43 +22,17 @@ export type SlideViewProps = {
   /** Show the field hints in faded type where a field is empty (editor only). */
   placeholders?: boolean;
   onFit?: (result: { fit: number; overflow: boolean }) => void;
+  /** The asset's title, in the running footer of document pages. */
+  title?: string;
 };
 
-const MIN_FIT = 0.62;
-
-function Rich({ paragraphs, as = "p" }: { paragraphs: Paragraph[]; as?: "p" | "span" }) {
-  const Tag = as;
-  return (
-    <>
-      {paragraphs.map((para, pi) => (
-        <Tag key={pi}>
-          {para.map((line, li) => (
-            <Fragment key={li}>
-              {li > 0 && <br />}
-              {line.map((piece, k) => {
-                let node: ReactNode = piece.text;
-                if (piece.em) node = <em>{node}</em>;
-                if (piece.strong) node = <strong>{node}</strong>;
-                return <Fragment key={k}>{node}</Fragment>;
-              })}
-            </Fragment>
-          ))}
-        </Tag>
-      ))}
-    </>
-  );
+export function SlideView(props: SlideViewProps) {
+  // A4 documents have their own page templates.
+  if (props.format.shape === "a4") return <DocPage {...props} />;
+  return <SocialSlide {...props} />;
 }
 
-function VisioIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="2.5" y="6" width="13" height="12" rx="1.5" />
-      <path d="M15.5 10.5 21.5 7v10l-6-3.5" />
-    </svg>
-  );
-}
-
-export function SlideView({ format, slide, index, total, universeId, options, mediaUrl, placeholders = false, onFit }: SlideViewProps) {
+function SocialSlide({ format, slide, index, total, universeId, options, mediaUrl, placeholders = false, onFit }: SlideViewProps) {
   const ref = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const def = getLayout(slide.layout);
@@ -85,35 +62,7 @@ export function SlideView({ format, slide, index, total, universeId, options, me
   };
 
   // Shrink the type until the body fits, once the fonts are ready. Runs on every change.
-  const contentKey = JSON.stringify([slide, format.id, options, placeholders, universeId]);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    const body = bodyRef.current;
-    if (!el || !body) return;
-    let cancelled = false;
-    const run = () => {
-      if (cancelled) return;
-      let fit = 1;
-      el.style.setProperty("--fit", "1");
-      const overflows = () => body.scrollHeight > body.clientHeight + 1 || body.scrollWidth > body.clientWidth + 1;
-      while (overflows() && fit > MIN_FIT) {
-        fit = Math.max(MIN_FIT, +(fit - 0.03).toFixed(2));
-        el.style.setProperty("--fit", String(fit));
-      }
-      const overflow = overflows();
-      el.dataset.fit = String(fit);
-      el.dataset.overflow = String(overflow);
-      el.dataset.ready = "true";
-      onFit?.({ fit, overflow });
-    };
-    el.dataset.ready = "false";
-    run();
-    document.fonts.ready.then(run);
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentKey]);
+  useFit(ref, bodyRef, JSON.stringify([slide, format.id, options, placeholders, universeId]), onFit);
 
   const isLast = index === total - 1;
   const swipe = format.multi && options.swipeHint && !isLast && total > 1;

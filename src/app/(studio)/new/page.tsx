@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import { FORMATS, PLATFORMS, type Format } from "@/lib/brand/formats";
-import { CAROUSEL_STARTERS, SINGLE_STARTERS, getLayout } from "@/lib/brand/layouts";
+import { getLayout, startersFor } from "@/lib/brand/layouts";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { api } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
@@ -33,8 +33,9 @@ export default function NewAssetPage() {
   const [starter, setStarter] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const starters = format?.multi ? CAROUSEL_STARTERS : SINGLE_STARTERS;
+  const starters = format ? startersFor(format) : [];
   const chosenStarter = starters.find((s) => s.id === starter) ?? starters[0];
+  const isDoc = format?.shape === "a4";
 
   const create = async () => {
     if (!format) return;
@@ -69,7 +70,7 @@ export default function NewAssetPage() {
         <h2 className="mb-5 flex items-baseline gap-3 font-display text-[24px] font-light">
           <span className="text-taupe-logo">1</span> Format
         </h2>
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-4 gap-5">
           {PLATFORMS.map((p) => (
             <div key={p}>
               <p className="eyebrow mb-3">{p}</p>
@@ -89,7 +90,7 @@ export default function NewAssetPage() {
                     <span>
                       <span className="block text-[14px] font-medium">{f.name}</span>
                       <span className="block text-[12px] text-muted">
-                        {f.width} × {f.height} · {f.hint}
+                        {f.shape === "a4" ? "A4 PDF" : `${f.width} × ${f.height}`} · {f.hint}
                       </span>
                     </span>
                   </button>
@@ -164,7 +165,7 @@ export default function NewAssetPage() {
               </button>
             ))}
           </div>
-          <p className="mt-3 text-[12px] text-muted">You can change templates, add or remove slides later.</p>
+          <p className="mt-3 text-[12px] text-muted">You can change templates, add or remove {isDoc ? "pages" : "slides"} later.</p>
         </section>
       )}
 

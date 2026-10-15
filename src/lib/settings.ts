@@ -6,6 +6,8 @@ export type Settings = {
   monthlyBudgetUsd: number;
   defaultImageModel: string;
   defaultUpscale: boolean;
+  /** Generate the photos Claude describes as soon as a visual is made or a change is applied; off, they stay as prompts on their slides. */
+  autoPhotos: boolean;
   /** Prices Rebeca corrected; anything missing falls back to DEFAULT_PRICES. */
   prices: Record<string, PriceRule>;
 };
@@ -14,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   monthlyBudgetUsd: 30,
   defaultImageModel: "black-forest-labs/flux-2-max",
   defaultUpscale: false,
+  autoPhotos: true,
   prices: {},
 };
 

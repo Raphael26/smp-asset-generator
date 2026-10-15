@@ -2,7 +2,26 @@
 
 export type GroundId = "cream" | "paper" | "stone" | "band";
 export type UniverseId = "decoration" | "organisation" | "entreprises";
-export type LayoutId = "cover" | "figure" | "text" | "list" | "quote" | "photo" | "cta";
+export type LayoutId =
+  | "cover"
+  | "figure"
+  | "text"
+  | "list"
+  | "quote"
+  | "photo"
+  | "cta"
+  | "doc-cover"
+  | "doc-page"
+  | "doc-photo"
+  | "doc-checklist"
+  | "doc-table"
+  | "doc-figures"
+  | "doc-offer"
+  | "doc-moodboard"
+  | "doc-closing";
+
+/** One photo of a moodboard grid, possibly still being generated. */
+export type GalleryItem = { image: ImageRef | null; photoJob?: string | null; photoPrompt?: string | null };
 
 export type ImageRef = {
   mediaId: string;
@@ -23,6 +42,8 @@ export type Slide = {
   photoPrompt?: string | null;
   /** Replicate job generating this slide's photo; cleared when the photo arrives. */
   photoJob?: string | null;
+  /** Moodboard photos. */
+  gallery?: GalleryItem[];
 };
 
 export type LogoMode = "wordmark" | "monogram" | "none";

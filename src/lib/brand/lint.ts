@@ -62,22 +62,36 @@ export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<stri
         if (!f.optional && f.key !== "eyebrow") issues.push({ severity: "error", slide: i, field: f.key, message: `${f.label} is empty.` });
         continue;
       }
-      if (f.kind === "list") {
+      if (f.kind === "list" || f.kind === "table") {
         const items = plain.split("\n").filter((l) => l.trim());
-        if (items.length > f.max) issues.push({ severity: "warning", slide: i, field: f.key, message: `${items.length} items: keep it to ${f.max} at most.` });
+        const what = f.kind === "table" ? "rows" : "items";
+        if (items.length > f.max) issues.push({ severity: "warning", slide: i, field: f.key, message: `${items.length} ${what}: keep it to ${f.max} at most${f.kind === "table" ? ", or split it over two pages" : ""}.` });
       } else if (plain.length > f.max) {
         issues.push({ severity: "warning", slide: i, field: f.key, message: `${f.label}: ${plain.length} characters, aim for ${f.max} or fewer.` });
       }
       textRules(value, i, f.key, issues);
     }
     const title = plainText(slide.fields.title ?? "");
-    if (title && !/[.?…»]$/.test(title))
+    // Offer names (Room Makeover…) are names, not sentences.
+    if (title && slide.layout !== "doc-offer" && !/[.?…»]$/.test(title))
       issues.push({ severity: "tip", slide: i, field: "title", message: "Titles end with a full stop (questions keep their question mark)." });
     if (slide.layout === "figure") {
       const source = plainText(slide.fields.source ?? "");
       if (source && !/\b(19|20)\d{2}\b/.test(source))
         issues.push({ severity: "warning", slide: i, field: "source", message: "Every figure names its source and its year." });
     }
+    if (slide.layout === "doc-figures") {
+      for (const n of [1, 2, 3]) {
+        const value = plainText(slide.fields[`value${n}`] ?? "");
+        const source = plainText(slide.fields[`source${n}`] ?? "");
+        if (value && !source) issues.push({ severity: "error", slide: i, field: `source${n}`, message: `Figure ${n} needs its source and year.` });
+        else if (source && !/\b(19|20)\d{2}\b/.test(source)) issues.push({ severity: "warning", slide: i, field: `source${n}`, message: `Source ${n}: add the year.` });
+      }
+    }
+    if (slide.layout === "doc-table" && /à compléter/i.test(slide.fields.table ?? ""))
+      issues.push({ severity: "warning", slide: i, field: "table", message: "Some cells say « à compléter »: fill them in before sending." });
+    if (slide.layout === "doc-moodboard" && !(slide.gallery ?? []).some((g) => g.image || g.photoJob))
+      issues.push({ severity: "tip", slide: i, field: "gallery", message: "The moodboard has no photos yet." });
     if (slide.layout === "quote") {
       const author = plainText(slide.fields.author ?? "");
       if (author && !/^rebeca$/i.test(author))

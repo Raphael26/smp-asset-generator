@@ -12,6 +12,7 @@ export function PromptBar({
   disabled,
   current,
   multi,
+  unit = "slide",
   onAsk,
   onRegenerate,
 }: {
@@ -20,6 +21,8 @@ export function PromptBar({
   disabled: boolean;
   current: number;
   multi: boolean;
+  /** « slide » or « page ». */
+  unit?: string;
   onAsk: (instruction: string) => Promise<boolean>;
   onRegenerate: (prompt: string) => void;
 }) {
@@ -31,7 +34,7 @@ export function PromptBar({
     const t = text.trim();
     if (!t || busy) return;
     // « ce slide » means the one on screen.
-    const instruction = multi ? `${t}\n(Le slide affiché est le slide ${current + 1}.)` : t;
+    const instruction = multi ? `${t}\n(${unit === "page" ? `La page affichée est la page ${current + 1}` : `Le slide affiché est le slide ${current + 1}`}.)` : t;
     if (await onAsk(instruction)) setText("");
   };
 
@@ -62,7 +65,7 @@ export function PromptBar({
           <Icon name="wand" size={15} className="absolute top-1/2 left-3 -translate-y-1/2 text-taupe-logo" />
           <input
             className="field h-11 pr-28 pl-9 text-[14px]"
-            placeholder={disabled ? "Add the Anthropic key in .env to ask Claude for changes" : multi ? `Ask for a change: « raccourcis ce slide », « ajoute un slide sur les routines du matin »…` : "Ask for a change: « un titre plus court », « une autre photo »…"}
+            placeholder={disabled ? "Add the Anthropic key in .env to ask Claude for changes" : multi ? (unit === "page" ? "Ask for a change: « raccourcis cette page », « ajoute une page de conseils », « une autre photo »…" : `Ask for a change: « raccourcis ce slide », « ajoute un slide sur les routines du matin »…`) : "Ask for a change: « un titre plus court », « une autre photo »…"}
             value={text}
             disabled={disabled || busy !== null}
             onChange={(e) => setText(e.target.value)}

@@ -21,6 +21,7 @@ export function AssetThumb({ asset, boxWidth, boxHeight, slide = 0 }: { asset: A
           universeId={asset.universe}
           options={asset.content.options}
           mediaUrl={previewUrl(400)}
+          title={asset.title}
           className="shadow-[0_6px_18px_-10px_rgba(48,43,39,.35)]"
         />
       ) : (

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "@/components/slides/slides.css";
+import "@/components/slides/docs.css";
 
 export const metadata: Metadata = {
   title: "Spanish Mum in Paris · Studio",

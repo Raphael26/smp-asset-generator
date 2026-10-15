@@ -50,6 +50,7 @@ export async function startGeneration(opts: {
   label?: string;
   assetId?: string | null;
   targetSlideId?: string;
+  targetGallery?: number;
 }): Promise<Job[]> {
   if (!IMAGE_MODELS.some((m) => m.id === opts.model)) throw new UserFacingError("Unknown image model.");
   const prompt = opts.prompt.trim();
@@ -70,6 +71,7 @@ export async function startGeneration(opts: {
       upscale: opts.upscale,
       label: opts.label ?? "",
       ...(opts.targetSlideId ? { targetSlideId: opts.targetSlideId } : {}),
+      ...(opts.targetGallery !== undefined ? { targetGallery: opts.targetGallery } : {}),
     };
     const job = {
       id: nanoid(12),
@@ -136,7 +138,7 @@ async function advance(job: Job): Promise<void> {
     if (prediction.status !== "succeeded") {
       const raw = typeof prediction.error === "string" ? prediction.error : prediction.error ? JSON.stringify(prediction.error) : "";
       finish(job, { status: prediction.status === "canceled" ? "canceled" : "failed", error: raw || "The model could not make this image." });
-      if (job.assetId && job.request.targetSlideId) placePhoto(job.assetId, job.request.targetSlideId, job.id, null);
+      if (job.assetId && job.request.targetSlideId) placePhoto(job.assetId, job.request.targetSlideId, job.id, null, job.request.targetGallery);
       return;
     }
     const buffer = await download(prediction.output);
@@ -165,7 +167,7 @@ async function advance(job: Job): Promise<void> {
         finish(job, { stage: "upscale", predictionId: up.id, mediaId: m.id });
       } else {
         finish(job, { status: "succeeded", mediaId: m.id });
-        if (job.assetId && req.targetSlideId) placePhoto(job.assetId, req.targetSlideId, job.id, m.id);
+        if (job.assetId && req.targetSlideId) placePhoto(job.assetId, req.targetSlideId, job.id, m.id, req.targetGallery);
       }
       return;
     }
@@ -186,11 +188,11 @@ async function advance(job: Job): Promise<void> {
     db.update(schema.media).set({ costUsd: cost + (source?.costUsd ?? 0) }).where(eq(schema.media.id, tmp.id)).run();
     recordCost({ provider: "replicate", model: UPSCALE_MODEL, operation: "upscale", quantity: { images: 1, megapixels: outMp }, costUsd: cost, assetId: job.assetId, mediaId: tmp.id, externalId: prediction.id });
     finish(job, { status: "succeeded", mediaId: tmp.id });
-    if (job.assetId && job.request.targetSlideId) placePhoto(job.assetId, job.request.targetSlideId, job.id, tmp.id);
+    if (job.assetId && job.request.targetSlideId) placePhoto(job.assetId, job.request.targetSlideId, job.id, tmp.id, job.request.targetGallery);
   } catch (err) {
     if (err instanceof MissingKeyError) throw err;
     finish(job, { status: "failed", error: err instanceof Error ? err.message : String(err) });
-    if (job.assetId && job.request.targetSlideId) placePhoto(job.assetId, job.request.targetSlideId, job.id, null);
+    if (job.assetId && job.request.targetSlideId) placePhoto(job.assetId, job.request.targetSlideId, job.id, null, job.request.targetGallery);
   } finally {
     busy.delete(job.id);
   }

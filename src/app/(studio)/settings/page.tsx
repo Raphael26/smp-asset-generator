@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
 
 type Data = {
-  settings: { monthlyBudgetUsd: number; defaultImageModel: string; defaultUpscale: boolean };
+  settings: { monthlyBudgetUsd: number; defaultImageModel: string; defaultUpscale: boolean; autoPhotos: boolean };
   keys: { anthropic: boolean; replicate: boolean };
 };
 
@@ -89,6 +89,10 @@ export default function SettingsPage() {
         <label className="flex items-center gap-3 text-[13.5px]">
           <input type="checkbox" className="accent-ink" checked={d.settings.defaultUpscale} onChange={(e) => save({ defaultUpscale: e.target.checked })} />
           Sharpen new images with Topaz by default
+        </label>
+        <label className="mt-3 flex items-center gap-3 text-[13.5px]">
+          <input type="checkbox" className="accent-ink" checked={d.settings.autoPhotos} onChange={(e) => save({ autoPhotos: e.target.checked })} />
+          Generate the photos Claude describes automatically (off: they wait on their slides until you generate them)
         </label>
       </section>
 

@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Asset, Job, Media } from "@/lib/db/schema";
 import type { AssetContent, AssetOptions, LayoutId, Slide } from "@/lib/content";
 import { makeId } from "@/lib/content";
-import { getFormat } from "@/lib/brand/formats";
-import { imageFrame, newSlide } from "@/lib/brand/layouts";
+import { formatLabel, getFormat, unitName } from "@/lib/brand/formats";
+import { MAX_GALLERY, galleryFrame, imageFrame, newSlide } from "@/lib/brand/layouts";
 import { lintContent, SEVERITY_ORDER, type Issue } from "@/lib/brand/lint";
 import { api } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
@@ -36,9 +36,12 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const [current, setCurrentRaw] = useState(0);
   const [tab, setTab] = useState<"slide" | "post">("slide");
   const [dialog, setDialog] = useState<Dialog>(null);
+  // The photo picker fills the slide's photo, or adds a photo to a moodboard.
+  const [pickerTarget, setPickerTarget] = useState<"image" | "gallery">("image");
   const [save, setSave] = useState<SaveState>("saved");
   const [overflow, setOverflow] = useState<Record<string, boolean>>({});
   const [keys, setKeys] = useState({ anthropic: true, replicate: true });
+  const [autoPhotos, setAutoPhotos] = useState(true);
   const [proposal, setProposal] = useState<{ mode: "edit" | "regenerate"; data: Proposal; prompt: string } | null>(null);
   const [promptBusy, setPromptBusy] = useState<"edit" | "regenerate" | null>(null);
   const [showNotes, setShowNotes] = useState(created);
@@ -58,7 +61,10 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
       })
       .catch(() => setMissing(true));
     api<{ media: Media[] }>("/api/media").then((d) => setMedia(d.media));
-    api<{ keys: { anthropic: boolean; replicate: boolean } }>("/api/settings").then((d) => setKeys(d.keys));
+    api<{ settings: { autoPhotos: boolean }; keys: { anthropic: boolean; replicate: boolean } }>("/api/settings").then((d) => {
+      setKeys(d.keys);
+      setAutoPhotos(d.settings.autoPhotos);
+    });
   }, [id]);
 
   const persist = useCallback(async () => {
@@ -148,7 +154,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
 
   // Photos being generated for slides: poll Replicate through the API and drop each photo in its slide.
   const pendingKey = (asset?.content.slides ?? [])
-    .map((s) => s.photoJob)
+    .flatMap((s) => [s.photoJob, ...(s.gallery ?? []).map((g) => g.photoJob)])
     .filter((j): j is string => Boolean(j))
     .join(",");
   useEffect(() => {
@@ -165,9 +171,20 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
           content: {
             ...a.content,
             slides: a.content.slides.map((s) => {
+              const photo = (j: Job) => (j.status === "succeeded" && j.mediaId ? { mediaId: j.mediaId, focusX: 50, focusY: 40, zoom: 1 } : null);
+              let next = s;
               const j = done.find((x) => x.id === s.photoJob);
-              if (!j) return s;
-              return { ...s, photoJob: null, image: j.status === "succeeded" && j.mediaId ? { mediaId: j.mediaId, focusX: 50, focusY: 40, zoom: 1 } : s.image };
+              if (j) next = { ...next, photoJob: null, image: photo(j) ?? s.image };
+              if (s.gallery?.some((g) => done.some((x) => x.id === g.photoJob))) {
+                next = {
+                  ...next,
+                  gallery: s.gallery.map((g) => {
+                    const gj = done.find((x) => x.id === g.photoJob);
+                    return gj ? { ...g, photoJob: null, image: photo(gj) ?? g.image } : g;
+                  }),
+                };
+              }
+              return next;
             }),
           },
         }));
@@ -222,12 +239,12 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const deleteSlide = (i: number) => {
     const s = asset.content.slides[i];
     const hasText = Object.values(s.fields).some((v) => v.trim()) || s.image;
-    if (hasText && !confirm(`Delete slide ${i + 1}? You can get it back from the history after the next save.`)) return;
+    if (hasText && !confirm(`Delete ${unitName(format)} ${i + 1}? You can get it back from the history after the next save.`)) return;
     setSlides((all) => all.filter((_, j) => j !== i));
     setCurrentRaw(Math.max(0, Math.min(current, total - 2)));
   };
 
-  const startPhotos = async (items: { slideId: string; prompt: string }[]) => {
+  const startPhotos = async (items: { slideId: string; prompt: string; galleryIndex?: number }[]) => {
     if (!items.length) return;
     if (!keys.replicate) {
       toast("Add REPLICATE_API_TOKEN to .env to generate photos. The photo prompts are kept on the slides.", "error");
@@ -235,11 +252,20 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     }
     try {
       await flush();
-      const { jobs } = await api<{ jobs: { slideId: string; jobId: string; prompt: string }[] }>(`/api/assets/${asset.id}/photos`, { method: "POST", json: { items } });
+      const { jobs } = await api<{ jobs: { slideId: string; jobId: string; prompt: string; galleryIndex?: number }[] }>(`/api/assets/${asset.id}/photos`, { method: "POST", json: { items } });
       setSlides((all) =>
         all.map((s) => {
-          const j = jobs.find((x) => x.slideId === s.id);
-          return j ? { ...s, photoJob: j.jobId, photoPrompt: j.prompt } : s;
+          let next = s;
+          for (const j of jobs.filter((x) => x.slideId === s.id)) {
+            if (j.galleryIndex === undefined) next = { ...next, photoJob: j.jobId, photoPrompt: j.prompt };
+            else {
+              const gallery = [...(next.gallery ?? [])];
+              while (gallery.length <= j.galleryIndex) gallery.push({ image: null });
+              gallery[j.galleryIndex] = { ...gallery[j.galleryIndex], photoJob: j.jobId, photoPrompt: j.prompt };
+              next = { ...next, gallery };
+            }
+          }
+          return next;
         }),
       );
     } catch (e) {
@@ -262,7 +288,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     }
   };
 
-  const applyProposal = async () => {
+  const applyProposal = async (generatePhotos: boolean) => {
     if (!proposal) return;
     const { mode, data, prompt } = proposal;
     await flush();
@@ -272,7 +298,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     if (mode === "regenerate") setCurrentRaw(0);
     else setCurrentRaw((c) => Math.min(c, data.content.slides.length - 1));
     await flush();
-    if (keys.replicate) await startPhotos(data.generate);
+    if (generatePhotos && keys.replicate) await startPhotos(data.generate);
     toast("Applied. The previous version is in the history.", "success");
   };
 
@@ -300,7 +326,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
         <div className="min-w-0">
           <p className="truncate font-display text-[20px] leading-tight font-light">{asset.title}</p>
           <p className="text-[11.5px] text-muted">
-            {format.platform} {format.name.toLowerCase()} ·{" "}
+            {formatLabel(format)} ·{" "}
             <span className={save === "error" ? "text-flag" : ""}>{save === "saved" ? "Saved" : save === "saving" ? "Saving…" : save === "pending" ? "Editing…" : "Not saved"}</span>
           </p>
         </div>
@@ -365,6 +391,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
             disabled={!keys.anthropic}
             current={current}
             multi={format.multi}
+            unit={unitName(format)}
             onAsk={(t) => askClaude("edit", t)}
             onRegenerate={(t) => askClaude("regenerate", t)}
           />
@@ -373,7 +400,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
           <div className="flex shrink-0 gap-6 border-b border-line px-6">
             {(
               [
-                ["slide", format.multi ? `Slide ${current + 1}` : "Visual"],
+                ["slide", format.multi ? `${unitName(format) === "page" ? "Page" : "Slide"} ${current + 1}` : "Visual"],
                 ["post", "Post"],
               ] as const
             ).map(([t, label]) => (
@@ -390,8 +417,17 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
                 index={current}
                 media={media}
                 onChange={(s) => setSlides((all) => all.map((x) => (x.id === s.id ? s : x)))}
-                onPickImage={() => setDialog("picker")}
+                onPickImage={() => {
+                  setPickerTarget("image");
+                  setDialog("picker");
+                }}
                 onNewPhoto={(prompt) => startPhotos([{ slideId: slide.id, prompt }])}
+                format={format}
+                onPickGallery={() => {
+                  setPickerTarget("gallery");
+                  setDialog("picker");
+                }}
+                onNewGalleryPhoto={(galleryIndex, prompt) => startPhotos([{ slideId: slide.id, prompt, galleryIndex }])}
               />
             ) : (
               <PostInspector
@@ -419,12 +455,21 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
         onClose={() => setDialog(null)}
         media={media}
         setMedia={(fn) => setMedia(fn)}
-        frame={slide ? imageFrame(slide.layout, format) : null}
+        frame={slide ? (pickerTarget === "gallery" ? galleryFrame() : imageFrame(slide.layout, format)) : null}
         assetId={asset.id}
-        currentId={slide?.image?.mediaId ?? null}
-        initialPrompt={slide?.photoPrompt ?? null}
+        currentId={pickerTarget === "gallery" ? null : (slide?.image?.mediaId ?? null)}
+        initialPrompt={pickerTarget === "gallery" ? null : (slide?.photoPrompt ?? null)}
         onPick={(mediaId) =>
-          slide && setSlides((all) => all.map((x) => (x.id === slide.id ? { ...x, image: { mediaId, focusX: 50, focusY: 40, zoom: 1 } } : x)))
+          slide &&
+          setSlides((all) =>
+            all.map((x) =>
+              x.id !== slide.id
+                ? x
+                : pickerTarget === "gallery"
+                  ? { ...x, gallery: [...(x.gallery ?? []), { image: { mediaId, focusX: 50, focusY: 50, zoom: 1 } }].slice(0, MAX_GALLERY) }
+                  : { ...x, image: { mediaId, focusX: 50, focusY: 40, zoom: 1 } },
+            ),
+          )
         }
       />
       {dialog === "improve" && (
@@ -484,7 +529,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
       />
       )}
       {proposal && (
-        <ChangeDialog open asset={asset} proposal={proposal.data} mode={proposal.mode} photosEnabled={keys.replicate} onClose={() => setProposal(null)} onApply={applyProposal} />
+        <ChangeDialog open asset={asset} proposal={proposal.data} mode={proposal.mode} photosEnabled={keys.replicate} autoPhotos={autoPhotos} onClose={() => setProposal(null)} onApply={applyProposal} />
       )}
       <BrandCheckDialog open={dialog === "check"} onClose={() => setDialog(null)} asset={asset} issues={issues} onGo={goToIssue} />
     </div>

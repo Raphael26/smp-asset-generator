@@ -60,7 +60,10 @@ export function ExportDialog({
   };
 
   const options: { kind: "png" | "pdf" | "zip"; slide: number | null; label: string; detail: string; primary?: boolean }[] = [];
-  if (format.id === "linkedin-carousel") {
+  if (format.shape === "a4") {
+    options.push({ kind: "pdf", slide: null, label: "PDF document", detail: `A4, ${total} page${total > 1 ? "s" : ""}, with selectable text and clickable links. Ready to e-mail or print.`, primary: true });
+    options.push({ kind: "zip", slide: null, label: "Pages as images", detail: "A ZIP with each page as a PNG (to post on social media) and the PDF." });
+  } else if (format.id === "linkedin-carousel") {
     options.push({ kind: "pdf", slide: null, label: "PDF for LinkedIn", detail: `One page per slide, ${total} pages. Upload it as a document.`, primary: true });
     options.push({ kind: "zip", slide: null, label: "All slides as images", detail: "A ZIP with the PNGs and the PDF." });
   } else if (format.multi) {
@@ -69,7 +72,7 @@ export function ExportDialog({
   } else {
     options.push({ kind: "png", slide: null, label: "PNG image", detail: `${format.width} × ${format.height}, ready to post.`, primary: true });
   }
-  if (format.multi) options.push({ kind: "png", slide: current, label: `Slide ${current + 1} only`, detail: "One PNG." });
+  if (format.multi) options.push({ kind: "png", slide: current, label: `${format.shape === "a4" ? "Page" : "Slide"} ${current + 1} only`, detail: "One PNG." });
 
   return (
     <Modal open={open} onClose={onClose} eyebrow="Export" title={<>Ready <em>to share.</em></>} width={720}>

@@ -62,3 +62,66 @@ export function parseInline(line: string): Line {
 export function plainText(input: string): string {
   return input.replace(/\*\*|\*/g, "").trim();
 }
+
+// ——— Rich text for document pages: paragraphs, « ## » subheadings, « - » bullets, « 1. » steps ———
+
+export type Block = { type: "p"; lines: Line[] } | { type: "h"; line: Line } | { type: "ul" | "ol"; items: Line[] };
+
+export function parseBlocks(input: string): Block[] {
+  const blocks: Block[] = [];
+  let para: string[] = [];
+  let list: { type: "ul" | "ol"; items: string[] } | null = null;
+  const flushPara = () => {
+    if (para.length) blocks.push({ type: "p", lines: para.map(parseInline) });
+    para = [];
+  };
+  const flushList = () => {
+    if (list) blocks.push({ type: list.type, items: list.items.map(parseInline) });
+    list = null;
+  };
+  for (const raw of frenchTypo(input).replace(/\r/g, "").split("\n")) {
+    const line = raw.trim();
+    let m: RegExpMatchArray | null;
+    if (!line) {
+      flushPara();
+      flushList();
+    } else if ((m = line.match(/^#{2,3}\s+(.*)$/))) {
+      flushPara();
+      flushList();
+      blocks.push({ type: "h", line: parseInline(m[1]) });
+    } else if ((m = line.match(/^[-–•]\s+(.*)$/)) || (m = line.match(/^\d+[.)]\s+(.*)$/))) {
+      const type = /^\d/.test(line) ? "ol" : "ul";
+      flushPara();
+      if (!list || list.type !== type) {
+        flushList();
+        list = { type, items: [] };
+      }
+      list.items.push(m[1]);
+    } else {
+      flushList();
+      para.push(line);
+    }
+  }
+  flushPara();
+  flushList();
+  return blocks;
+}
+
+/** Web addresses and e-mails in a text, so the PDF can make them clickable. */
+const LINK = /(https?:\/\/[^\s]+|[\w.+-]+@[\w-]+(?:\.[\w-]+)+|\b(?:[\w-]+\.)+(?:com|fr|eu|org|net|io|es|co\.uk)(?:\/[^\s]*)?)/g;
+
+export function splitLinks(text: string): { text: string; href: string | null }[] {
+  const out: { text: string; href: string | null }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(LINK)) {
+    let url = m[0];
+    const trail = url.match(/[.,;:!?)» ]+$/)?.[0] ?? "";
+    url = url.slice(0, url.length - trail.length);
+    const start = m.index!;
+    if (start > last) out.push({ text: text.slice(last, start), href: null });
+    out.push({ text: url, href: url.includes("@") && !url.startsWith("http") ? `mailto:${url}` : url.startsWith("http") ? url : `https://${url}` });
+    last = start + url.length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), href: null });
+  return out;
+}

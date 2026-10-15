@@ -95,8 +95,10 @@ export type ImageJobRequest = {
   height: number;
   upscale: boolean;
   label: string;
-  /** When set, the finished photo is placed in this slide of job.assetId. */
+  /** When set, the finished photo is placed in this slide of job.assetId… */
   targetSlideId?: string;
+  /** …or in this cell of the slide's moodboard gallery. */
+  targetGallery?: number;
 };
 
 export const costEvents = sqliteTable(

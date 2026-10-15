@@ -9,5 +9,6 @@
 - Never let an image model draw text: photos come from Replicate, all text is set by `SlideView` in the brand fonts.
 - Next.js 16 with `cacheComponents: false`: pages are client components that call the `/api` route handlers.
 - Paths built from `process.cwd()` in server code carry `/* turbopackIgnore: true */`; without it the dev server watches `data/` and reloads the page on every database write.
+- A4 documents are formats with `shape: "a4"` (794 × 1123 px) and `doc-*` page templates rendered by `DocPage.tsx`; `layoutsFor(format)` / `equivalentLayout` keep social and document templates apart. Moodboard photos live in `slide.gallery` (jobs target `targetGallery`).
 - Preview and export share `src/components/slides/SlideView.tsx`; exports go through `/render/[id]` in headless Chrome (`src/lib/render/export.ts`).
 - Schema change: edit `src/lib/db/schema.ts`, run `npm run db:generate`, commit the migration in `drizzle/`.

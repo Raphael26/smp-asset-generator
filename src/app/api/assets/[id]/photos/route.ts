@@ -6,7 +6,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const { id } = await params;
     const body = await req.json();
-    const items = Array.isArray(body.items) ? body.items.map((x: { slideId: unknown; prompt: unknown }) => ({ slideId: String(x.slideId), prompt: String(x.prompt ?? "") })) : [];
+    const items = Array.isArray(body.items)
+      ? body.items.map((x: { slideId: unknown; prompt: unknown; galleryIndex?: unknown }) => ({
+          slideId: String(x.slideId),
+          prompt: String(x.prompt ?? ""),
+          ...(typeof x.galleryIndex === "number" ? { galleryIndex: x.galleryIndex } : {}),
+        }))
+      : [];
     if (!items.length) throw new UserFacingError("No photo to generate.");
     return Response.json({ jobs: await startSlidePhotos(id, items) });
   } catch (err) {

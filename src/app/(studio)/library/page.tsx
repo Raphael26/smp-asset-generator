@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import type { Asset } from "@/lib/db/schema";
-import { FORMATS, PLATFORMS, getFormat } from "@/lib/brand/formats";
+import { FORMATS, PLATFORMS, formatLabel, getFormat, unitName } from "@/lib/brand/formats";
 import { UNIVERSES, universe } from "@/lib/brand/tokens";
 import { api, relativeTime } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
@@ -138,8 +138,8 @@ export default function LibraryPage() {
                       {a.title}
                     </Link>
                     <p className="mt-1 text-[12.5px] text-muted">
-                      {f.platform} {f.name.toLowerCase()}
-                      {f.multi ? ` · ${a.content.slides.length} slides` : ""} · {relativeTime(a.updatedAt)}
+                      {formatLabel(f)}
+                      {f.multi ? ` · ${a.content.slides.length} ${unitName(f, a.content.slides.length > 1)}` : ""} · {relativeTime(a.updatedAt)}
                     </p>
                   </div>
                   <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">

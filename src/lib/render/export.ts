@@ -81,7 +81,9 @@ export async function exportAsset(assetId: string, origin: string, kind: ExportK
         await ready();
         const shot = await page.locator(".smp-slide").first().screenshot({ type: "png" });
         const name = total > 1 ? `${base}-${String(i + 1).padStart(2, "0")}.png` : `${base}.png`;
-        await sharp(shot).resize(format.width, format.height, { kernel: "lanczos3" }).png({ compressionLevel: 9 }).toFile(path.join(dir, name));
+        // Social images are posted at their native size; document pages keep the 2x capture (sharper when shared).
+        const scale = format.shape === "a4" ? 2 : 1;
+        await sharp(shot).resize(format.width * scale, format.height * scale, { kernel: "lanczos3" }).png({ compressionLevel: 9 }).toFile(path.join(dir, name));
         files.push(name);
       }
     }

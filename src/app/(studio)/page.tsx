@@ -9,6 +9,7 @@ import { UNIVERSES } from "@/lib/brand/tokens";
 import { api, relativeTime } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
+import { Switch } from "@/components/ui/Switch";
 import { AssetThumb } from "@/components/studio/AssetThumb";
 
 const EXAMPLES: { label: string; prompt: string; options?: Partial<CreateOptions> }[] = [
@@ -33,6 +34,26 @@ const EXAMPLES: { label: string; prompt: string; options?: Partial<CreateOptions
     prompt: "Une story Instagram pour dire bonjour : « Bonjour, je suis Rebeca », Espagnole de naissance, Parisienne d’adoption, maman, et je vous aide à créer une maison belle et facile à vivre. Avec ma photo.",
     options: { formatId: "instagram-story", universe: "none", images: "library" },
   },
+  {
+    label: "PDF guide to share",
+    prompt: "Un guide PDF « Une entrée rangée, des matins plus doux » : 5 idées simples pour organiser l’entrée quand on a des enfants (patères à leur hauteur, un panier par enfant, un vide-poche, un banc pour les chaussures, une routine du soir). Une checklist de la routine du soir à imprimer. À offrir en échange de l’inscription à ma newsletter.",
+    options: { formatId: "doc-guide", universe: "organisation", images: "ai" },
+  },
+  {
+    label: "Client moodboard & shopping list",
+    prompt: "Un document pour Claire et Thomas : moodboard de leur salon (lumineux, lin, chêne clair, touches de terracotta et d’olive), puis la shopping list : canapé en lin Kave Home 1 290 €, lampadaire en rotin Maisons du Monde 189 €, tapis en jute La Redoute 240 €, rideaux en lin lavé à compléter. Terminer par mes conseils d’agencement et la suite (un aller-retour de modifications).",
+    options: { formatId: "doc-client", universe: "decoration", images: "auto" },
+  },
+  {
+    label: "Offer sheet for Décoration",
+    prompt: "Une fiche des offres Décoration : Déco Express 100 € (une pièce, conseils en visio d’une heure), Room Makeover 350 € (moodboard, palette, mobilier, shopping list, un aller-retour, à distance), Projet Déco Paris à partir de 1 500 € (accompagnement complet à Paris). Avec la mention TVA.",
+    options: { formatId: "doc-offer", universe: "decoration", images: "none" },
+  },
+  {
+    label: "Proposal for a company",
+    prompt: "Une proposition pour la société Lumen (DRH : Sophie Martin) : atelier Home & Life Balance d’1 h 30 pour 20 collaborateurs parents, sur place à Paris. Contexte : retour de congé parental et charge mentale. Chiffres : +60 % des femmes avec un enfant de moins de 15 ans déclarent une charge mentale lourde (INED, 2026) ; 42 % placent l’équilibre des temps de vie en tête des raisons de rester (Randstad Workmonitor, 2026). Programme en 4 temps, The Home Balance Toolkit offert, tarif sur devis.",
+    options: { formatId: "doc-proposal", universe: "entreprises", images: "none" },
+  },
 ];
 
 const PHOTO_CHOICES: { id: CreateOptions["images"]; label: string; hint: string }[] = [
@@ -44,7 +65,7 @@ const PHOTO_CHOICES: { id: CreateOptions["images"]; label: string; hint: string 
 
 const STEPS = ["Reading your prompt", "Choosing the templates", "Writing the slides in Rebeca’s voice", "Writing the caption", "Describing the photos", "Almost there"];
 
-type KeysResponse = { keys: { anthropic: boolean; replicate: boolean } };
+type SettingsResponse = { settings: { autoPhotos: boolean }; keys: { anthropic: boolean; replicate: boolean } };
 
 export default function CreatePage() {
   const router = useRouter();
@@ -58,11 +79,15 @@ export default function CreatePage() {
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [recent, setRecent] = useState<Asset[]>([]);
-  const [keys, setKeys] = useState<KeysResponse["keys"] | null>(null);
+  const [keys, setKeys] = useState<SettingsResponse["keys"] | null>(null);
+  const [autoPhotos, setAutoPhotos] = useState(true);
 
   useEffect(() => {
     api<{ assets: Asset[] }>("/api/assets").then((d) => setRecent(d.assets.filter((a) => a.prompt).slice(0, 6)));
-    api<KeysResponse>("/api/settings").then((d) => setKeys(d.keys));
+    api<SettingsResponse>("/api/settings").then((d) => {
+      setKeys(d.keys);
+      setAutoPhotos(d.settings.autoPhotos);
+    });
   }, []);
 
   useEffect(() => {
@@ -74,6 +99,13 @@ export default function CreatePage() {
 
   const format = options.formatId === "auto" ? null : getFormat(options.formatId);
   const set = (patch: Partial<CreateOptions>) => setOptions((o) => ({ ...o, ...patch }));
+  const mayGenerate = options.images !== "none" && options.images !== "library";
+
+  // Remembered for the next visual and for the changes asked in the editor.
+  const toggleAutoPhotos = (v: boolean) => {
+    setAutoPhotos(v);
+    api("/api/settings", { method: "PUT", json: { autoPhotos: v } }).catch((e) => toast((e as Error).message, "error"));
+  };
 
   const improve = async () => {
     setImproving(true);
@@ -93,8 +125,9 @@ export default function CreatePage() {
     setBusy(true);
     setElapsed(0);
     try {
-      const out = await api<{ asset: { id: string }; notes: string[]; photos: number }>("/api/create", { method: "POST", json: { prompt, options } });
+      const out = await api<{ asset: { id: string }; notes: string[]; photos: number; described: number }>("/api/create", { method: "POST", json: { prompt, options, autoPhotos } });
       if (out.photos) toast(`${out.photos} photo${out.photos > 1 ? "s are" : " is"} being generated: they appear in the slides in about 30 seconds.`, "success");
+      else if (out.described && !autoPhotos) toast(`${out.described} photo${out.described > 1 ? "s" : ""} described, not generated: generate ${out.described > 1 ? "them" : "it"} from the photo slide${out.described > 1 ? "s" : ""} when you want.`, "success");
       router.push(`/assets/${out.asset.id}?created=1`);
     } catch (e) {
       toast((e as Error).message, "error");
@@ -181,7 +214,7 @@ export default function CreatePage() {
               <optgroup key={p} label={p}>
                 {FORMATS.filter((f) => f.platform === p).map((f) => (
                   <option key={f.id} value={f.id}>
-                    {p} {f.name.toLowerCase()}
+                    {p === "Document" ? `${f.name} (A4 PDF)` : `${p} ${f.name.toLowerCase()}`}
                   </option>
                 ))}
               </optgroup>
@@ -211,13 +244,21 @@ export default function CreatePage() {
               </button>
             ))}
           </div>
-          {options.images !== "none" && options.images !== "library" && keys?.replicate === false && (
+          {mayGenerate && (
+            <div className="mt-2.5">
+              <Switch checked={autoPhotos} onChange={toggleAutoPhotos} disabled={busy}>
+                Generate photos automatically
+              </Switch>
+              {!autoPhotos && <p className="mt-1 text-[11.5px] text-muted">Claude describes them; you generate each one from its slide.</p>}
+            </div>
+          )}
+          {mayGenerate && autoPhotos && keys?.replicate === false && (
             <p className="mt-1.5 text-[11.5px] text-flag">No Replicate key: photo slides will wait for a photo.</p>
           )}
         </div>
         <div>
           <label className="label" htmlFor="opt-slides">
-            Slides
+            {format?.shape === "a4" ? "Pages" : "Slides"}
           </label>
           <select
             id="opt-slides"
@@ -238,7 +279,7 @@ export default function CreatePage() {
 
       <div className="mt-8 flex items-center justify-between gap-6 border-t border-line pt-6">
         <p className="text-[12.5px] text-muted">
-          About $0.05 for the text{options.images === "none" || options.images === "library" ? "" : ", plus $0.10 per generated photo (four at most)"}. Every cost appears on the Costs page.
+          About $0.05 for the text{!mayGenerate ? "" : autoPhotos ? ", plus $0.10 per generated photo (four at most)" : ". Photos are $0.10 each, only when you generate them"}. Every cost appears on the Costs page.
         </p>
         <button className="btn btn-solid h-12 px-7" disabled={!ready || busy} onClick={generate}>
           {busy ? "Creating…" : "Create the visual"} <Icon name="arrowRight" size={15} />

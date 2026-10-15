@@ -8,7 +8,8 @@ import { plainText } from "@/lib/brand/typography";
 export function FieldInput({ def, value, onChange, id }: { def: FieldDef; value: string; onChange: (v: string) => void; id: string }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const plain = plainText(value);
-  const count = def.kind === "list" ? plain.split("\n").filter((l) => l.trim()).length : plain.length;
+  const counted = def.kind === "list" || def.kind === "table";
+  const count = counted ? plain.split("\n").filter((l) => l.trim()).length : plain.length;
   const over = count > def.max;
 
   // Wraps the selection in * or ** (or removes them if already there).
@@ -39,7 +40,7 @@ export function FieldInput({ def, value, onChange, id }: { def: FieldDef; value:
     });
   };
 
-  const lines = Math.max(def.kind === "title" ? 2 : def.kind === "line" ? 1 : 3, value.split("\n").length + (def.kind === "text" ? 1 : 0));
+  const lines = Math.max(def.kind === "title" ? 2 : def.kind === "line" ? 1 : def.kind === "rich" || def.kind === "table" ? 6 : 3, value.split("\n").length + (def.kind === "text" || def.kind === "rich" ? 1 : 0));
 
   return (
     <div>
@@ -50,7 +51,7 @@ export function FieldInput({ def, value, onChange, id }: { def: FieldDef; value:
         </label>
         <span className={`text-[11px] tabular-nums ${over ? "font-semibold text-flag" : "text-muted"}`}>
           {count}/{def.max}
-          {def.kind === "list" ? " items" : ""}
+          {def.kind === "list" ? " items" : def.kind === "table" ? " rows" : ""}
         </span>
       </div>
       {def.kind === "line" ? (
@@ -60,9 +61,9 @@ export function FieldInput({ def, value, onChange, id }: { def: FieldDef; value:
           <textarea
             id={id}
             ref={ref}
-            className="field block"
             style={{ minHeight: 0 }}
-            rows={Math.min(lines, 9)}
+            rows={Math.min(lines, def.kind === "rich" || def.kind === "table" ? 18 : 9)}
+            className={`field block ${def.kind === "table" ? "font-mono text-[12.5px]" : ""}`}
             value={value}
             placeholder={def.placeholder}
             onChange={(e) => onChange(e.target.value)}
@@ -71,18 +72,18 @@ export function FieldInput({ def, value, onChange, id }: { def: FieldDef; value:
                 e.preventDefault();
                 wrap("*");
               }
-              if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && def.kind === "text") {
+              if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b" && (def.kind === "text" || def.kind === "rich")) {
                 e.preventDefault();
                 wrap("**");
               }
             }}
           />
-          {def.kind !== "list" && (
+          {def.kind !== "list" && def.kind !== "table" && (
             <div className="mt-1 flex gap-1">
               <button type="button" className="btn btn-ghost btn-sm h-6 px-2 font-display text-[13px] tracking-normal normal-case italic" onClick={() => wrap("*")} title="Italic (⌘I): select words first">
                 Italic
               </button>
-              {def.kind === "text" && (
+              {(def.kind === "text" || def.kind === "rich") && (
                 <button type="button" className="btn btn-ghost btn-sm h-6 px-2 text-[12px] font-semibold tracking-normal normal-case" onClick={() => wrap("**")} title="Bold (⌘B): select words first">
                   Bold
                 </button>
