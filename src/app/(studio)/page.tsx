@@ -234,6 +234,7 @@ export default function CreatePage() {
               <OrientationChoice landscape={landscape} onChange={(l) => set({ formatId: withOrientation(format, l).id })} disabled={busy} />
             </div>
           )}
+          {!format && <p className="mt-1.5 text-[11.5px] text-muted">For a PDF, pick the document here to choose portrait or landscape, or write « en paysage ».</p>}
         </div>
         <div>
           <label className="label" htmlFor="opt-universe">

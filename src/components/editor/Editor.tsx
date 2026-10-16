@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Asset, Job, Media } from "@/lib/db/schema";
 import type { AssetContent, AssetOptions, LayoutId, Slide } from "@/lib/content";
 import { makeId } from "@/lib/content";
-import { formatLabel, getFormat, unitName } from "@/lib/brand/formats";
+import { formatLabel, getFormat, unitName, withOrientation } from "@/lib/brand/formats";
 import { MAX_GALLERY, galleryFrame, imageFrame, newSlide } from "@/lib/brand/layouts";
 import { lintContent, SEVERITY_ORDER, type Issue } from "@/lib/brand/lint";
 import { api } from "@/components/ui/api";
@@ -384,7 +384,15 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
               </button>
             </div>
           )}
-          <Stage asset={asset} current={current} setCurrent={setCurrent} issues={issues} onFit={onFit} onIssue={goToIssue} />
+          <Stage
+            asset={asset}
+            current={current}
+            setCurrent={setCurrent}
+            issues={issues}
+            onFit={onFit}
+            onIssue={goToIssue}
+            onOrientation={(l) => update((a) => ({ ...a, formatId: withOrientation(getFormat(a.formatId), l).id }))}
+          />
           <PromptBar
             key={asset.prompt ?? "none"}
             prompt={asset.prompt}

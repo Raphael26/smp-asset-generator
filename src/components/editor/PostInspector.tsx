@@ -3,9 +3,8 @@
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { AssetOptions, LogoMode } from "@/lib/content";
-import { formatLabel, getFormat, isDocument, isLandscape, withOrientation } from "@/lib/brand/formats";
+import { formatLabel, getFormat } from "@/lib/brand/formats";
 import { UNIVERSES } from "@/lib/brand/tokens";
-import { OrientationChoice } from "@/components/studio/OrientationChoice";
 import { STATUS_OPTIONS } from "@/components/studio/StatusBadge";
 import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
@@ -54,14 +53,6 @@ export function PostInspector({
           {formatLabel(format)}{format.shape === "a4" ? "" : ` · ${format.width} × ${format.height}`}
         </p>
       </section>
-
-      {isDocument(format) && (
-        <section>
-          <p className="label">Orientation</p>
-          <OrientationChoice landscape={isLandscape(format)} onChange={(l) => onChange({ formatId: withOrientation(format, l).id })} />
-          <p className="mt-1.5 text-[11.5px] text-muted">The same pages, turned. In landscape, photos sit beside the text and text pages run in two columns.</p>
-        </section>
-      )}
 
       <section>
         <p className="label">Universe</p>
