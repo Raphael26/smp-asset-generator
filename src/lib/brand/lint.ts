@@ -1,6 +1,7 @@
 // Brand check: the rules from the guidelines that can be verified without a model.
 import type { AssetContent } from "@/lib/content";
 import { getLayout } from "@/lib/brand/layouts";
+import { isDeck, type Format } from "@/lib/brand/formats";
 import { plainText } from "@/lib/brand/typography";
 
 export type Severity = "error" | "warning" | "tip";
@@ -51,8 +52,10 @@ function textRules(text: string, slide: number | null, field: string | null, iss
     issues.push({ severity: "tip", slide, field, message: "The tagline is always « Creating a home you love. », in English." });
 }
 
-export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<string> } = {}): Issue[] {
+export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<string>; format?: Format } = {}): Issue[] {
   const issues: Issue[] = [];
+  // Slides are read from across a room: shorter limits than the pages they are drawn from.
+  const deck = opts.format ? isDeck(opts.format) : false;
   content.slides.forEach((slide, i) => {
     const def = getLayout(slide.layout);
     for (const f of def.fields) {
@@ -65,9 +68,11 @@ export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<stri
       if (f.kind === "list" || f.kind === "table") {
         const items = plain.split("\n").filter((l) => l.trim());
         const what = f.kind === "table" ? "rows" : "items";
-        if (items.length > f.max) issues.push({ severity: "warning", slide: i, field: f.key, message: `${items.length} ${what}: keep it to ${f.max} at most${f.kind === "table" ? ", or split it over two pages" : ""}.` });
-      } else if (plain.length > f.max) {
-        issues.push({ severity: "warning", slide: i, field: f.key, message: `${f.label}: ${plain.length} characters, aim for ${f.max} or fewer.` });
+        const max = deck ? Math.min(f.max, 8) : f.max;
+        if (items.length > max) issues.push({ severity: "warning", slide: i, field: f.key, message: `${items.length} ${what}: keep it to ${max} at most${deck ? ", or split it over two slides" : f.kind === "table" ? ", or split it over two pages" : ""}.` });
+      } else {
+        const max = deck && (f.kind === "rich" || f.kind === "text") ? Math.min(f.max, 600) : f.max;
+        if (plain.length > max) issues.push({ severity: "warning", slide: i, field: f.key, message: `${f.label}: ${plain.length} characters, aim for ${max} or fewer${max < f.max ? " on a slide" : ""}.` });
       }
       textRules(value, i, f.key, issues);
     }
@@ -92,6 +97,15 @@ export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<stri
       issues.push({ severity: "warning", slide: i, field: "table", message: "Some cells say « à compléter »: fill them in before sending." });
     if (slide.layout === "doc-moodboard" && !(slide.gallery ?? []).some((g) => g.image || g.photoJob))
       issues.push({ severity: "tip", slide: i, field: "gallery", message: "The moodboard has no photos yet." });
+    if (slide.layout === "free")
+      for (const b of slide.blocks ?? []) {
+        if (b.type === "text") {
+          textRules(b.text, i, `block:${b.id}`, issues);
+          const n = plainText(b.text).length;
+          if (n > 600) issues.push({ severity: "warning", slide: i, field: `block:${b.id}`, message: `A text block holds ${n} characters: aim for 600 or fewer on a slide.` });
+        }
+        if (b.type === "image" && !b.image) issues.push({ severity: "error", slide: i, field: `block:${b.id}`, message: "A photo block is empty: choose a photo, or delete the block." });
+      }
     if (slide.layout === "quote") {
       const author = plainText(slide.fields.author ?? "");
       if (author && !/^rebeca$/i.test(author))

@@ -6,12 +6,14 @@ import path from "node:path";
 import { chromium, type Browser } from "playwright-core";
 import sharp from "sharp";
 import { zipSync } from "fflate";
+import PptxGenJS from "pptxgenjs";
 import { desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
 import { EXPORTS_DIR } from "@/lib/paths";
 import { addRevision, getAsset } from "@/lib/assets";
 import { getFormat } from "@/lib/brand/formats";
+import { plainText } from "@/lib/brand/typography";
 import { UserFacingError } from "@/lib/errors";
 
 const g = globalThis as unknown as { __smpBrowser?: Promise<Browser>; __smpBrowserTimer?: NodeJS.Timeout };
@@ -49,7 +51,7 @@ export function slug(s: string): string {
   );
 }
 
-export type ExportKind = "png" | "pdf" | "zip";
+export type ExportKind = "png" | "pdf" | "zip" | "pptx";
 
 export async function exportAsset(assetId: string, origin: string, kind: ExportKind, onlySlide: number | null = null) {
   const asset = getAsset(assetId);
@@ -74,18 +76,45 @@ export async function exportAsset(assetId: string, origin: string, kind: ExportK
       });
     };
 
+    // One slide as a PNG. Social images and presentation slides are posted at their native size; document pages
+    // keep the 2x capture (sharper when shared).
+    const capture = async (i: number): Promise<Buffer> => {
+      await page.goto(`${origin}/render/${assetId}?slide=${i}`, { waitUntil: "networkidle" });
+      await ready();
+      const shot = await page.locator(".smp-slide").first().screenshot({ type: "png" });
+      const scale = format.shape === "a4" ? 2 : 1;
+      return sharp(shot).resize(format.width * scale, format.height * scale, { kernel: "lanczos3" }).png({ compressionLevel: 9 }).toBuffer();
+    };
+
     if (kind === "png" || kind === "zip") {
       const indexes = onlySlide !== null ? [onlySlide] : [...Array(total).keys()];
       for (const i of indexes) {
-        await page.goto(`${origin}/render/${assetId}?slide=${i}`, { waitUntil: "networkidle" });
-        await ready();
-        const shot = await page.locator(".smp-slide").first().screenshot({ type: "png" });
         const name = total > 1 ? `${base}-${String(i + 1).padStart(2, "0")}.png` : `${base}.png`;
-        // Social images are posted at their native size; document pages keep the 2x capture (sharper when shared).
-        const scale = format.shape === "a4" ? 2 : 1;
-        await sharp(shot).resize(format.width * scale, format.height * scale, { kernel: "lanczos3" }).png({ compressionLevel: 9 }).toFile(path.join(dir, name));
+        fs.writeFileSync(path.join(dir, name), await capture(i));
         files.push(name);
       }
+    }
+
+    if (kind === "pptx") {
+      // One picture per slide, so the deck looks exactly like the preview wherever it is opened (PowerPoint,
+      // Keynote, Google Slides) whatever fonts are installed; the speaker notes travel with each slide.
+      const pres = new PptxGenJS();
+      pres.defineLayout({ name: "smp", width: format.width / 144, height: format.height / 144 });
+      pres.layout = "smp";
+      pres.title = asset.title;
+      pres.author = "Spanish Mum in Paris";
+      pres.company = "Spanish Mum in Paris";
+      for (let i = 0; i < total; i++) {
+        const s = asset.content.slides[i];
+        const png = await capture(i);
+        const out = pres.addSlide();
+        const firstText = (s.blocks ?? []).flatMap((b) => (b.type === "text" ? [b.text] : []))[0] ?? "";
+        out.addImage({ data: `image/png;base64,${png.toString("base64")}`, x: 0, y: 0, w: "100%", h: "100%", altText: plainText(s.fields.title ?? "") || plainText(firstText) || `Slide ${i + 1}` });
+        if (s.notes?.trim()) out.addNotes(s.notes.trim());
+      }
+      const name = `${base}.pptx`;
+      fs.writeFileSync(path.join(dir, name), (await pres.write({ outputType: "nodebuffer" })) as Buffer);
+      files.push(name);
     }
 
     if (kind === "pdf" || (kind === "zip" && format.multi)) {

@@ -14,6 +14,8 @@ export function useFit(
   bodyRef: RefObject<HTMLDivElement | null>,
   key: string,
   onFit?: (result: { fit: number; overflow: boolean }) => void,
+  /** Extra overflow check, run once the type is fitted (free slides: a text block fuller than its box). */
+  extra?: (el: HTMLDivElement) => boolean,
 ) {
   useLayoutEffect(() => {
     const el = ref.current;
@@ -29,7 +31,7 @@ export function useFit(
         fit = Math.max(MIN_FIT, +(fit - 0.03).toFixed(2));
         el.style.setProperty("--fit", String(fit));
       }
-      const overflow = overflows();
+      const overflow = overflows() || Boolean(extra?.(el));
       el.dataset.fit = String(fit);
       el.dataset.overflow = String(overflow);
       el.dataset.ready = "true";

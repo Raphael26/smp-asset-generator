@@ -14,7 +14,7 @@ export function BrandCheckDialog({ open, onClose, asset, issues, onGo }: { open:
     if (i.slide === null) return "Caption";
     const s = asset.content.slides[i.slide];
     const f = s ? getLayout(s.layout).fields.find((x) => x.key === i.field) : null;
-    return `${multi ? `Slide ${i.slide + 1} · ` : ""}${f?.label ?? (i.field === "image" ? "Photo" : i.field ?? "")}`;
+    return `${multi ? `Slide ${i.slide + 1} · ` : ""}${f?.label ?? (i.field === "image" ? "Photo" : i.field?.startsWith("block:") ? "Block" : (i.field ?? ""))}`;
   };
   return (
     <Modal open={open} onClose={onClose} eyebrow="Brand check" title={issues.length ? <>A few things <em>to look at.</em></> : <>On brand.</>} width={680}>

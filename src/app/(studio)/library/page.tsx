@@ -10,6 +10,7 @@ import { api, relativeTime } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
 import { AssetThumb } from "@/components/studio/AssetThumb";
+import { NewPresentation } from "@/components/studio/NewPresentation";
 import { StatusBadge } from "@/components/studio/StatusBadge";
 
 const STATUSES = [
@@ -65,6 +66,7 @@ export default function LibraryPage() {
           </h1>
         </div>
         <div className="flex gap-2">
+          <NewPresentation />
           <Link href="/new" className="btn btn-outline">
             <Icon name="plus" size={15} /> From a template
           </Link>

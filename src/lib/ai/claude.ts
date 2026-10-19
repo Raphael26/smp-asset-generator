@@ -86,6 +86,16 @@ export function describeAsset(asset: Asset, onlySlide: number | null): string {
   lines.push("");
   asset.content.slides.forEach((slide, i) => {
     if (onlySlide !== null && i !== onlySlide) return;
+    if (slide.layout === "free") {
+      lines.push(`Slide ${i + 1} — laid out by hand by Rebeca (template free « Blank slide »): keep it exactly as it is. Its content:`);
+      for (const b of slide.blocks ?? []) {
+        if (b.type === "text" && b.text.trim()) lines.push(`  - ${b.style}: ${JSON.stringify(b.text)}`);
+        else if (b.type === "image") lines.push(`  - photo${b.image ? "" : " (empty)"}`);
+        else if (b.type === "table") lines.push(`  - table: ${JSON.stringify(b.rows)}`);
+      }
+      if (slide.notes?.trim()) lines.push(`  speaker notes: ${JSON.stringify(slide.notes.trim())}`);
+      return;
+    }
     const def = getLayout(slide.layout);
     lines.push(`${format.shape === "a4" ? "Page" : "Slide"} ${i + 1} — template ${def.id} « ${def.name} »: ${def.description}`);
     for (const f of def.fields) {
@@ -107,6 +117,7 @@ export function describeAsset(asset: Asset, onlySlide: number | null): string {
     if (slide.image) lines.push(`  photo: yes${slide.photoPrompt ? ` (generated from: ${JSON.stringify(slide.photoPrompt)})` : ""}`);
     else if (slide.photoJob) lines.push("  photo: being generated");
     if (slide.gallery?.length) lines.push(`  moodboard gallery: ${slide.gallery.length} photo${slide.gallery.length > 1 ? "s" : ""}${slide.gallery.some((g) => g.photoJob) ? " (some being generated)" : ""}`);
+    if (slide.notes?.trim()) lines.push(`  speaker notes: ${JSON.stringify(slide.notes.trim())}`);
   });
   return lines.join("\n");
 }
@@ -171,6 +182,8 @@ const PLATFORM_CAPTION: Record<string, string> = {
   Facebook: "Facebook post: two or three short paragraphs, 300 to 800 characters, ending with a quiet invitation and spanishmuminparis.com. No hashtags needed.",
   Document:
     "Message to send with the PDF document. For a client or a company: a short, warm e-mail in « vous » (greeting, what the document contains, the next step, signed « Rebeca »), 400 to 900 characters, no hashtags. For a guide or an offer sheet meant for everyone: a post announcing it (a hook, what is inside, how to get it), 400 to 900 characters, at most three hashtags.",
+  Presentation:
+    "Message to send with the presentation: a short, warm e-mail in « vous » (greeting, what the deck covers, the next step, signed « Rebeca »), 300 to 700 characters, no hashtags.",
 };
 
 export async function writeCaption(asset: Asset, mode: "write" | "improve", instruction: string) {

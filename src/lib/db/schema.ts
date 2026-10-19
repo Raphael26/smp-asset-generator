@@ -123,7 +123,7 @@ export const exportsTable = sqliteTable("exports", {
   assetId: text("asset_id")
     .notNull()
     .references(() => assets.id, { onDelete: "cascade" }),
-  kind: text("kind").notNull(), // png | pdf | zip
+  kind: text("kind").notNull(), // png | pdf | zip | pptx
   files: text("files", { mode: "json" }).$type<string[]>().notNull(), // relative to data/exports/<id>
   createdAt: text("created_at").notNull().$defaultFn(now),
 });

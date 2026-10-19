@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   cacheComponents: false,
   partialPrefetching: false,
   // Native or browser-driving packages are loaded with Node's require instead of being bundled.
-  serverExternalPackages: ["better-sqlite3", "sharp", "playwright-core"],
+  serverExternalPackages: ["better-sqlite3", "sharp", "playwright-core", "pptxgenjs"],
   // The dev badge would otherwise appear in exported images.
   devIndicators: false,
   turbopack: {

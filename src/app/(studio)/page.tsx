@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
 import { Switch } from "@/components/ui/Switch";
 import { AssetThumb } from "@/components/studio/AssetThumb";
+import { NewPresentation } from "@/components/studio/NewPresentation";
 import { OrientationChoice } from "@/components/studio/OrientationChoice";
 
 const EXAMPLES: { label: string; prompt: string; options?: Partial<CreateOptions> }[] = [
@@ -54,6 +55,18 @@ const EXAMPLES: { label: string; prompt: string; options?: Partial<CreateOptions
     label: "Proposal for a company",
     prompt: "Une proposition pour la société Lumen (DRH : Sophie Martin) : atelier Home & Life Balance d’1 h 30 pour 20 collaborateurs parents, sur place à Paris. Contexte : retour de congé parental et charge mentale. Chiffres : +60 % des femmes avec un enfant de moins de 15 ans déclarent une charge mentale lourde (INED, 2026) ; 42 % placent l’équilibre des temps de vie en tête des raisons de rester (Randstad Workmonitor, 2026). Programme en 4 temps, The Home Balance Toolkit offert, tarif sur devis.",
     options: { formatId: "doc-proposal", universe: "entreprises", images: "none" },
+  },
+  {
+    label: "Workshop deck for a company",
+    prompt:
+      "Une présentation pour la DRH de Lumen : proposer l’atelier Home & Life Balance (1 h 30, sur place à Paris, 20 collaborateurs parents). Contexte : retours de congé parental et charge mentale. Chiffres : +60 % des femmes avec un enfant de moins de 15 ans déclarent une charge mentale lourde (INED, 2026) ; 42 % placent l’équilibre des temps de vie en tête des raisons de rester (Randstad Workmonitor, 2026). Programme en 4 temps, The Home Balance Toolkit offert, tarif sur devis. Avec ce que je dis sur chaque slide.",
+    options: { formatId: "deck-corporate", universe: "entreprises", images: "auto" },
+  },
+  {
+    label: "Project presentation for a client",
+    prompt:
+      "Une présentation pour Claire et Thomas : leur salon repensé. L’intention (lumineux, lin, chêne clair, touches de terracotta et d’olive), le moodboard, les pièces choisies : canapé en lin Kave Home 1 290 €, lampadaire en rotin Maisons du Monde 189 €, tapis en jute La Redoute 240 €, rideaux en lin lavé à compléter. Puis les prochaines étapes et un aller-retour de modifications.",
+    options: { formatId: "deck-client", universe: "decoration", images: "ai" },
   },
 ];
 
@@ -223,7 +236,7 @@ export default function CreatePage() {
               <optgroup key={p} label={p}>
                 {FORMATS.filter((f) => f.platform === p).map((f) => (
                   <option key={f.id} value={f.id}>
-                    {p === "Document" ? `${f.name} (A4 PDF)` : `${p} ${f.name.toLowerCase()}`}
+                    {p === "Document" ? `${f.name} (A4 PDF)` : p === "Presentation" ? `${f.name} (PowerPoint)` : `${p} ${f.name.toLowerCase()}`}
                   </option>
                 ))}
               </optgroup>
@@ -283,7 +296,7 @@ export default function CreatePage() {
             disabled={busy || (format !== null && !format.multi)}
           >
             <option value="">Auto</option>
-            {[3, 4, 5, 6, 7, 8, 10].map((n) => (
+            {[3, 4, 5, 6, 7, 8, 10, 12, 15].map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
@@ -372,13 +385,16 @@ export default function CreatePage() {
         </section>
       )}
 
-      <p className="mt-12 text-[12.5px] text-muted">
-        Prefer to write every text yourself?{" "}
-        <Link href="/new" className="underline underline-offset-4 hover:text-ink">
-          Start from a blank template
-        </Link>
-        .
-      </p>
+      <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-line pt-6">
+        <p className="text-[12.5px] text-muted">
+          Prefer to write every text yourself?{" "}
+          <Link href="/new" className="underline underline-offset-4 hover:text-ink">
+            Start from a blank template
+          </Link>
+          , or open a blank presentation and lay it out yourself, slide by slide.
+        </p>
+        <NewPresentation className="btn btn-outline btn-sm" />
+      </div>
     </div>
   );
 }

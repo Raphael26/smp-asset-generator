@@ -1,10 +1,11 @@
 // Output formats. Adding one = adding an entry here (the templates adapt to its shape).
 
-export type Shape = "portrait" | "square" | "story" | "landscape" | "a4";
+/** The shape sets the templates and their sizes: social shapes, A4 document pages, 16:9 presentation slides. */
+export type Shape = "portrait" | "square" | "story" | "landscape" | "a4" | "slide";
 
 export type Format = {
   id: string;
-  platform: "LinkedIn" | "Instagram" | "Facebook" | "Document";
+  platform: "LinkedIn" | "Instagram" | "Facebook" | "Document" | "Presentation";
   name: string;
   width: number;
   height: number;
@@ -12,8 +13,8 @@ export type Format = {
   /** Several slides (carousel) or a single image. */
   multi: boolean;
   maxSlides: number;
-  /** LinkedIn carousels are uploaded as a PDF document; everything else as images. */
-  primaryExport: "pdf" | "png";
+  /** LinkedIn carousels are uploaded as a PDF document, presentations as PowerPoint; everything else as images. */
+  primaryExport: "pdf" | "png" | "pptx";
   hint: string;
   /** Landscape A4 documents: the id of the same document in portrait. */
   landscapeOf?: string;
@@ -189,9 +190,42 @@ export const FORMATS: Format[] = [
     primaryExport: "pdf",
     hint: "For a company: Home & Life Balance workshops, key figures, programme, price.",
   },
+  // Presentations: 16:9 slides (1920 × 1080) laid out with the document pages drawn twice as large, plus a
+  // section divider and an agenda. Exported as PowerPoint (one image per slide, with speaker notes) or PDF.
+  {
+    id: "deck-corporate",
+    platform: "Presentation",
+    name: "Corporate deck",
+    width: 1920,
+    height: 1080,
+    shape: "slide",
+    multi: true,
+    maxSlides: 30,
+    primaryExport: "pptx",
+    hint: "To present to a company: a workshop proposal, the Home & Life Balance workshop itself, a talk.",
+  },
+  {
+    id: "deck-client",
+    platform: "Presentation",
+    name: "Client presentation",
+    width: 1920,
+    height: 1080,
+    shape: "slide",
+    multi: true,
+    maxSlides: 30,
+    primaryExport: "pptx",
+    hint: "To present a project to a client: the intention, the moodboard, the pieces, the next steps.",
+  },
 ];
 
 export const isDocument = (f: Format) => f.shape === "a4";
+/** 16:9 presentations: laid out with the document pages (and the deck-… templates), exported as PowerPoint. */
+export const isDeck = (f: Format) => f.shape === "slide";
+/** Posts, carousels and stories: the social templates. */
+export const isSocial = (f: Format) => !isDocument(f) && !isDeck(f);
+/** Design units of a presentation slide: docs.css draws a 960 × 540 page zoomed ×2 into the 1920 × 1080 slide.
+ *  Free blocks are placed in these units. */
+export const DECK_DESIGN = { width: 960, height: 540, zoom: 2 } as const;
 export const isLandscape = (f: Format) => f.width > f.height;
 
 // Every A4 document also exists in landscape (1123 × 794), as « <id>-landscape »: the same pages, with
@@ -212,9 +246,10 @@ export function withOrientation(f: Format, landscape: boolean): Format {
   return getFormat(landscape ? `${portrait}-landscape` : portrait);
 }
 
-export const PLATFORMS = ["LinkedIn", "Instagram", "Facebook", "Document"] as const;
+export const PLATFORMS = ["LinkedIn", "Instagram", "Facebook", "Document", "Presentation"] as const;
 
-/** « LinkedIn carousel », « Instagram story », « Client document · A4 PDF », « Guide · A4 landscape PDF ». */
-export const formatLabel = (f: Format) => (isDocument(f) ? `${f.name} · A4 ${isLandscape(f) ? "landscape " : ""}PDF` : `${f.platform} ${f.name.toLowerCase()}`);
+/** « LinkedIn carousel », « Instagram story », « Client document · A4 PDF », « Guide · A4 landscape PDF », « Corporate deck · 16:9 slides ». */
+export const formatLabel = (f: Format) =>
+  isDocument(f) ? `${f.name} · A4 ${isLandscape(f) ? "landscape " : ""}PDF` : isDeck(f) ? `${f.name} · 16:9 slides` : `${f.platform} ${f.name.toLowerCase()}`;
 /** What the parts of an asset are called: slides for social formats, pages for documents. */
 export const unitName = (f: Format, plural = false) => (isDocument(f) ? (plural ? "pages" : "page") : plural ? "slides" : "slide");

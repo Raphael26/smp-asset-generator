@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { AssetOptions, LogoMode } from "@/lib/content";
-import { formatLabel, getFormat } from "@/lib/brand/formats";
+import { formatLabel, getFormat, isDeck, isDocument, isSocial } from "@/lib/brand/formats";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { STATUS_OPTIONS } from "@/components/studio/StatusBadge";
 import { Icon } from "@/components/ui/Icon";
@@ -96,7 +96,7 @@ export function PostInspector({
               Universe tag on the title slide
             </label>
           )}
-          {format.multi && (
+          {format.multi && isSocial(format) && (
             <>
               <label className="flex items-center gap-2.5">
                 <input type="checkbox" className="accent-ink" checked={o.swipeHint} onChange={(e) => onOptions({ swipeHint: e.target.checked })} />
@@ -114,7 +114,7 @@ export function PostInspector({
       <section>
         <div className="mb-1.5 flex items-baseline justify-between">
           <label className="label mb-0" htmlFor="caption">
-            {format.shape === "a4" ? "Message to send with it" : "Caption"}
+            {isSocial(format) ? "Caption" : "Message to send with it"}
           </label>
           <span className="text-[11px] text-muted tabular-nums">{caption.length} characters</span>
         </div>
@@ -123,9 +123,11 @@ export function PostInspector({
           className="field"
           rows={Math.min(14, Math.max(5, caption.split("\n").length + 1))}
           placeholder={
-            format.shape === "a4"
+            isDocument(format)
               ? "The e-mail to the client, or the post announcing the guide. Write it yourself, or ask Claude for a first draft."
-              : `The text published with the visual on ${format.platform}. Write it yourself, or ask Claude for a first draft.`
+              : isDeck(format)
+                ? "The e-mail to send with the presentation. Write it yourself, or ask Claude for a first draft."
+                : `The text published with the visual on ${format.platform}. Write it yourself, or ask Claude for a first draft.`
           }
           value={caption}
           onChange={(e) => setCaption(e.target.value)}

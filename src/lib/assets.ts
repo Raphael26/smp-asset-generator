@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
 import type { Asset, CreateOptions } from "@/lib/db/schema";
 import { DEFAULT_OPTIONS, type AssetContent } from "@/lib/content";
-import { ALL_FORMATS, getFormat } from "@/lib/brand/formats";
+import { ALL_FORMATS, getFormat, isSocial } from "@/lib/brand/formats";
 import { slidesFromStarter, startersFor } from "@/lib/brand/layouts";
 import { UserFacingError } from "@/lib/errors";
 
@@ -37,7 +37,7 @@ export function createAsset(input: { title: string; formatId: string; universe: 
   const content: AssetContent = {
     slides: slidesFromStarter(starter),
     caption: "",
-    options: { ...DEFAULT_OPTIONS, universeTag: Boolean(input.universe) && format.multi && format.shape !== "a4" },
+    options: { ...DEFAULT_OPTIONS, universeTag: Boolean(input.universe) && format.multi && isSocial(format) },
   };
   const id = nanoid(10);
   db.insert(schema.assets)

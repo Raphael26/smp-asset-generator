@@ -24,11 +24,15 @@ export type SlideViewProps = {
   onFit?: (result: { fit: number; overflow: boolean }) => void;
   /** The asset's title, in the running footer of document pages. */
   title?: string;
+  /** Free slides: a block being typed in the editor, left blank so the text box shows in its place. */
+  hiddenBlock?: string | null;
+  /** Real links in document pages (the PDF export). Off in previews, which sit inside a link or a button. */
+  links?: boolean;
 };
 
 export function SlideView(props: SlideViewProps) {
-  // A4 documents have their own page templates.
-  if (props.format.shape === "a4") return <DocPage {...props} />;
+  // A4 documents have their own page templates; presentations draw the same pages twice as large, in 16:9.
+  if (props.format.shape === "a4" || props.format.shape === "slide") return <DocPage {...props} />;
   return <SocialSlide {...props} />;
 }
 
@@ -50,7 +54,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
     const { value, ph } = field(key);
     if (!value) return null;
     return (
-      <Wrapper className={`${className}${ph ? " is-ph" : ""}`}>
+      <Wrapper className={`${className}${ph ? " is-ph" : ""}`} data-field={key}>
         <Rich paragraphs={parseRich(value)} as={as} />
       </Wrapper>
     );
@@ -58,7 +62,11 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
   const plain = (key: string, className: string) => {
     const { value, ph } = field(key);
     if (!value) return null;
-    return <p className={`${className}${ph ? " is-ph" : ""}`}>{frenchTypo(value.replace(/\*/g, ""))}</p>;
+    return (
+      <p className={`${className}${ph ? " is-ph" : ""}`} data-field={key}>
+        {frenchTypo(value.replace(/\*/g, ""))}
+      </p>
+    );
   };
 
   // Shrink the type until the body fits, once the fonts are ready. Runs on every change.
@@ -80,7 +88,13 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
   const eyebrow = field("eyebrow");
   const top = (
     <div className="smp-top">
-      {eyebrow.value ? <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`}>{frenchTypo(eyebrow.value)}</span> : <span />}
+      {eyebrow.value ? (
+        <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`} data-field="eyebrow">
+          {frenchTypo(eyebrow.value)}
+        </span>
+      ) : (
+        <span />
+      )}
       {logo}
     </div>
   );
@@ -90,7 +104,13 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
   const sourceText = slide.layout === "figure" && source.value ? frenchTypo(`Source : ${source.value.replace(/^source\s*:\s*/i, "")}`) : null;
   const bottom = (
     <div className="smp-bottom">
-      {sourceText ? <span className={source.ph ? "is-ph" : ""}>{sourceText}</span> : page && <span>{page}</span>}
+      {sourceText ? (
+        <span className={source.ph ? "is-ph" : ""} data-field="source">
+          {sourceText}
+        </span>
+      ) : (
+        page && <span>{page}</span>
+      )}
       {swipe ? (
         <span className="smp-swipe">
           Glissez <span aria-hidden>→</span>
@@ -165,7 +185,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
         <>
           {rich("title", "smp-title", "span", "h1")}
           {items.value && (
-            <ul className={`smp-items${items.ph ? " is-ph" : ""}`}>
+            <ul className={`smp-items${items.ph ? " is-ph" : ""}`} data-field="items">
               {items.value
                 .split("\n")
                 .map((l) => l.trim())
@@ -190,12 +210,20 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
       body = (
         <>
           {q.value && (
-            <div className={`smp-quote${q.ph ? " is-ph" : ""}`}>
+            <div className={`smp-quote${q.ph ? " is-ph" : ""}`} data-field="quote">
               <Rich paragraphs={parseRich(`«${q.value.replace(/^[«"\s]+|[»"\s]+$/g, "")}»`)} />
             </div>
           )}
-          {author.value && <p className={`smp-signature${author.ph ? " is-ph" : ""}`}>{frenchTypo(author.value)}</p>}
-          {role.value && <p className="smp-role">{frenchTypo(role.value)}</p>}
+          {author.value && (
+            <p className={`smp-signature${author.ph ? " is-ph" : ""}`} data-field="author">
+              {frenchTypo(author.value)}
+            </p>
+          )}
+          {role.value && (
+            <p className="smp-role" data-field="role">
+              {frenchTypo(role.value)}
+            </p>
+          )}
         </>
       );
       break;
@@ -213,17 +241,25 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
       const url = field("url");
       body = (
         <>
-          {eyebrow.value && <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`}>{frenchTypo(eyebrow.value)}</span>}
+          {eyebrow.value && (
+            <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`} data-field="eyebrow">
+              {frenchTypo(eyebrow.value)}
+            </span>
+          )}
           {rich("title", "smp-title", "span", "h1")}
           {rich("text", "smp-lead")}
           {button.value && (
-            <span className={`smp-button${button.ph ? " is-ph" : ""}`}>
+            <span className={`smp-button${button.ph ? " is-ph" : ""}`} data-field="button">
               {/r[ée]server un appel/i.test(button.value) ? <VisioIcon /> : null}
               {frenchTypo(button.value)}
               {/r[ée]server un appel/i.test(button.value) ? null : <span aria-hidden>→</span>}
             </span>
           )}
-          {url.value && <p className="smp-url">{url.value}</p>}
+          {url.value && (
+            <p className="smp-url" data-field="url">
+              {url.value}
+            </p>
+          )}
         </>
       );
       break;

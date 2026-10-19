@@ -4,7 +4,7 @@
 import { z } from "zod";
 import type { Asset, CreateOptions, Media } from "@/lib/db/schema";
 import { DEFAULT_OPTIONS, type AssetContent, type GalleryItem, type GroundId, type ImageRef, type LayoutId, type Slide } from "@/lib/content";
-import { ALL_FORMATS, FORMATS, LANDSCAPE_DOCUMENTS, getFormat, isDocument, isLandscape, withOrientation, type Format } from "@/lib/brand/formats";
+import { ALL_FORMATS, FORMATS, LANDSCAPE_DOCUMENTS, getFormat, isDeck, isDocument, isLandscape, isSocial, withOrientation, type Format } from "@/lib/brand/formats";
 import { LAYOUTS, MAX_GALLERY, equivalentLayout, getLayout, newSlide } from "@/lib/brand/layouts";
 import { GROUNDS, UNIVERSES } from "@/lib/brand/tokens";
 import { PHOTO_BRIEF } from "@/lib/brand/voice";
@@ -22,14 +22,18 @@ function buildGuide(): string {
   l.push("Rebeca describes what she wants. You return the finished visual as data: the studio lays out your text in the brand's templates, fonts and colours, and an image model generates the photos you describe. You never draw text into images.");
   l.push("");
   l.push("## Formats");
-  for (const f of FORMATS) l.push(`- ${f.id}: ${f.platform} ${f.name.toLowerCase()}, ${f.width}×${f.height}, ${f.multi ? `carousel of up to ${f.maxSlides} slides` : "a single image (exactly one slide)"}. ${f.hint}`);
+  const count = (f: Format) =>
+    !f.multi ? "a single image (exactly one slide)" : isDocument(f) ? `document of up to ${f.maxSlides} pages` : isDeck(f) ? `deck of up to ${f.maxSlides} slides` : `carousel of up to ${f.maxSlides} slides`;
+  for (const f of FORMATS) l.push(`- ${f.id}: ${f.platform} ${f.name.toLowerCase()}, ${f.width}×${f.height}, ${count(f)}. ${f.hint}`);
   l.push(`- ${LANDSCAPE_DOCUMENTS.map((f) => f.id).join(", ")}: the same A4 documents in landscape (${LANDSCAPE_DOCUMENTS[0].width}×${LANDSCAPE_DOCUMENTS[0].height}).`);
   l.push("");
   const photoNote = (t: (typeof LAYOUTS)[number]) =>
     t.image === "required" ? " Has a photo (required)." : t.image === "optional" ? " Can have a photo." : t.image === "gallery" ? ` Has a gallery of up to ${MAX_GALLERY} photos.` : "";
-  const forKind = (t: (typeof LAYOUTS)[number]) => (t.kind === "both" ? "social formats and documents" : t.kind === "document" ? "A4 documents only" : "social formats only");
+  const forKind = (t: (typeof LAYOUTS)[number]) =>
+    t.kind === "both" ? "every format" : t.kind === "document" ? "A4 documents and presentations" : t.kind === "deck" ? "presentations only" : "social formats only";
   l.push("## Templates (each slide or page uses one)");
   for (const t of LAYOUTS) {
+    if (t.manual) continue;
     l.push(`### ${t.id} — ${t.name} (${forKind(t)}): ${t.description}${photoNote(t)}`);
     for (const f of t.fields) {
       const limit = f.kind === "list" ? `max ${f.max} items, one per line` : `max ${f.max} characters`;
@@ -60,7 +64,7 @@ function buildGuide(): string {
   l.push("## How to compose");
   l.push("- Carousel: 4 to 8 slides unless she asks otherwise. Slide 1 hooks the reader (a title, or a key figure when she gave a striking sourced figure). One idea per slide. The last slide is the closing template (cta) on the band ground. Alternate cream and paper grounds for rhythm.");
   l.push("- Single post or story: exactly one slide, in the template that carries the message best.");
-  l.push("- Social formats use only social templates (and quote); A4 documents use only document pages (doc-…) and quote.");
+  l.push("- Social formats use only social templates (and quote); A4 documents use only document pages (doc-…) and quote; presentations use the document pages, the deck-… templates and quote.");
   l.push("- Eyebrows: a short noun phrase, usually the same on every slide of a carousel (for example the theme, or « 01 — Décoration »).");
   l.push("- Titles: one *italic* phrase for the warm or emotional words, ending with a full stop (questions keep their question mark).");
   l.push("- Her own words come first: when she gives wording, keep it verbatim where it fits; only fix typos and fit it to the limits. When she gives a topic, write the copy yourself, in her voice.");
@@ -81,10 +85,19 @@ function buildGuide(): string {
   l.push("- Moodboard: four to six photos in its gallery, the palette as the project's hex colours, the main materials.");
   l.push("- Caption for a document: the short message to send with the PDF (an e-mail to the client, or a post announcing the guide), plain text.");
   l.push("");
+  l.push("## Presentations (16:9 slides, exported as PowerPoint or PDF)");
+  l.push("- Slides Rebeca talks over, or sends: one idea per slide, few words, large type. A text slide (doc-page) holds at most about 600 characters, in short lines or bullets; a list, a checklist or a table at most eight rows; spread longer content over several slides.");
+  l.push("- Every slide has speaker notes (notes): what Rebeca says on that slide, two to five sentences in French in her voice, as she would speak. The slide shows the key words; the notes carry the argument, the examples and the transition to the next slide. Notes are null for every other format.");
+  l.push("- Structure: a cover (doc-cover, often with a photo), an agenda (deck-agenda) when there are three parts or more, a section divider (deck-section, numbered 01, 02…) before each part, two to four slides per part, then the closing slide (doc-closing). Eight to sixteen slides. Alternate cream and paper grounds; section dividers on stone.");
+  l.push("- Corporate deck (deck-corporate): « Préparé pour » the company on the cover. A proposal: the context (what is at stake for them), key figures (only figures she gave, each with its source), the programme of the Home & Life Balance workshop (a table or a page), the offer (price « Sur devis » unless she gives one), the closing slide. The workshop itself: advice slides (text, photo, checklist), a quote, the closing slide.");
+  l.push("- Client presentation (deck-client): for one client she names, written to them (« vous »): the intention, the moodboard (gallery, palette, materials), photo slides, the shopping list (table), the next steps, the closing slide. Never invent products, shops, prices or links: write « à compléter ».");
+  l.push("- Caption for a presentation: the short e-mail to send with the deck, plain text.");
+  l.push("- A slide with the template « free » was laid out by hand by Rebeca (blocks she placed herself). When editing, return it with layout « free », its basedOn number and no fields: the studio keeps it exactly as it is. Never create a free slide yourself.");
+  l.push("");
   l.push("## Photos");
   l.push("Templates with a photo: photo, doc-photo (required) and doc-cover (optional). For the others set photo.source to « none ». The moodboard uses its gallery (a list of photos with the same sources); every other template has an empty gallery.");
   l.push("- « library »: one of her images listed in the request, by its id. Real photos of Rebeca are the brand's strongest images: use them for personal topics, her story, her work.");
-  l.push(`- « generate »: write an English prompt for Flux 2 (60 to 120 words: the scene, the light, the materials, the camera; end with « no people, no text, no logos »). At most ${MAX_GENERATED_PHOTOS} per social visual, ${MAX_GENERATED_PHOTOS_DOCUMENT} per document.`);
+  l.push(`- « generate »: write an English prompt for Flux 2 (60 to 120 words: the scene, the light, the materials, the camera; end with « no people, no text, no logos »). At most ${MAX_GENERATED_PHOTOS} per social visual, ${MAX_GENERATED_PHOTOS_DOCUMENT} per document or presentation.`);
   l.push("- « keep »: when editing, keep the slide's current photo.");
   l.push(PHOTO_BRIEF);
   return l.join("\n");
@@ -113,6 +126,7 @@ const SlideOut = z.object({
   fields: z.array(z.object({ key: z.string(), value: z.string() })),
   photo: PhotoOut,
   gallery: z.array(PhotoOut).describe("Moodboard photos; empty for every other template"),
+  notes: z.string().nullable().describe("Presentations only: the speaker notes of this slide, in French; null for every other format"),
 });
 
 const ComposeSchema = z.object({
@@ -179,14 +193,17 @@ function normalize(
 ): Proposal {
   const { format, existing } = ctx;
   const doc = isDocument(format);
-  const maxPhotos = doc ? MAX_GENERATED_PHOTOS_DOCUMENT : MAX_GENERATED_PHOTOS;
+  const deck = isDeck(format);
+  // Documents and presentations share the page templates and the photo allowance.
+  const paged = doc || deck;
+  const maxPhotos = paged ? MAX_GENERATED_PHOTOS_DOCUMENT : MAX_GENERATED_PHOTOS;
   const mediaIds = new Set(ctx.media.map((m) => m.id));
   const notes = [...out.notes];
   let slidesOut = out.slides;
   if (!format.multi && slidesOut.length > 1) slidesOut = slidesOut.slice(0, 1);
   if (slidesOut.length > format.maxSlides) slidesOut = slidesOut.slice(0, format.maxSlides);
   const none = { source: "none" as const, mediaId: null, prompt: null };
-  if (!slidesOut.length) slidesOut = [{ basedOn: null, layout: doc ? "doc-cover" : "cover", ground: "cream", fields: [], photo: none, gallery: [] }];
+  if (!slidesOut.length) slidesOut = [{ basedOn: null, layout: paged ? "doc-cover" : "cover", ground: "cream", fields: [], photo: none, gallery: [], notes: null }];
 
   const usedIds = new Set<string>();
   const generate: Proposal["generate"] = [];
@@ -207,9 +224,15 @@ function normalize(
 
   const slides: Slide[] = slidesOut.map((s, index) => {
     const base = existing && s.basedOn ? existing.content.slides[s.basedOn - 1] : undefined;
+    // A slide Rebeca laid out by hand stays exactly as she left it: Claude can only keep it (or drop it).
+    if (s.layout === "free" && base?.layout === "free" && !usedIds.has(base.id)) {
+      usedIds.add(base.id);
+      const notes = s.notes?.trim();
+      return { ...structuredClone(base), ...(deck && notes ? { notes } : {}) };
+    }
     // Social visuals use social templates, documents use pages; « No photos » means no template that needs one.
-    let layout = equivalentLayout(s.layout as LayoutId, doc);
-    if (ctx.images === "none" && (layout === "photo" || layout === "doc-photo")) layout = doc ? "doc-page" : "text";
+    let layout = equivalentLayout(s.layout === "free" ? "doc-page" : (s.layout as LayoutId), format);
+    if (ctx.images === "none" && (layout === "photo" || layout === "doc-photo")) layout = paged ? "doc-page" : "text";
     const slide = newSlide(layout, s.ground as GroundId);
     if (base && !usedIds.has(base.id)) slide.id = base.id;
     usedIds.add(slide.id);
@@ -220,6 +243,12 @@ function normalize(
       const alias = (ALIASES[f.key] ?? []).map((k) => given.get(k)).find((v) => v);
       const value = direct || (def.id !== s.layout ? alias : undefined);
       if (value) slide.fields[f.key] = value;
+    }
+    // Speaker notes travel with presentation slides; when editing, a slide keeps its notes unless Claude rewrote them.
+    if (deck) {
+      const notes = s.notes?.trim();
+      if (notes) slide.notes = notes;
+      else if (base?.notes) slide.notes = base.notes;
     }
     const unit = doc ? "page" : "slide";
 
@@ -259,7 +288,7 @@ function normalize(
     content: {
       slides,
       caption: out.caption.trim(),
-      options: existing ? existing.content.options : { ...DEFAULT_OPTIONS, universeTag: format.multi && !doc && Boolean(universe) },
+      options: existing ? existing.content.options : { ...DEFAULT_OPTIONS, universeTag: isSocial(format) && format.multi && Boolean(universe) },
     },
     notes: notes.slice(0, 6),
     generate,
@@ -293,7 +322,7 @@ export async function composeFromPrompt(prompt: string, options: CreateOptions, 
       ? `Format: ${fixed.id} (chosen by her, keep it${turned ? `; ${turned.id} if her prompt asks for the document in ${isLandscape(turned) ? "landscape" : "portrait"}` : ""}).`
       : "Format: choose the one that suits her request best (a carousel for several points or figures, a post for one idea, a story for a quick tip or announcement). If she names a platform, stay on it.",
     options.universe === "auto" ? "Universe: choose the one her request belongs to, or none." : `Universe: ${options.universe} (chosen by her).`,
-    fixed?.multi || !fixed ? (options.slides ? `Number of slides: ${options.slides} if it is a carousel.` : "") : "",
+    fixed?.multi || !fixed ? (options.slides ? `Number of slides or pages: ${options.slides}, if the format has several.` : "") : "",
     photoRule(options.images),
     options.images === "none" || options.images === "ai" ? "" : libraryList(media),
     "",
@@ -314,7 +343,7 @@ export async function editWithPrompt(asset: Asset, instruction: string, media: M
     "Here is a visual Rebeca is working on. She asks for a change:",
     instruction.trim(),
     "",
-    "Return the whole visual with the change made. Keep everything she did not ask to change exactly as it is: same text, same templates, same order, and photo source « keep » for photos that stay. For each slide, basedOn is the number of the current slide it comes from (null for a new slide).",
+    `Return the whole visual with the change made. Keep everything she did not ask to change exactly as it is: same text, same templates, same order, and photo source « keep » for photos that stay. For each slide, basedOn is the number of the current slide it comes from (null for a new slide).${isDeck(format) ? " Return each slide's speaker notes too, as they are unless she asks to change them." : ""}`,
     turned
       ? `Keep the format ${format.id}, unless she asks for the document in ${isLandscape(turned) ? "landscape" : "portrait"}: then use ${turned.id}.`
       : `Keep the format ${format.id}.`,

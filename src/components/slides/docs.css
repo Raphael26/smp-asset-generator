@@ -166,3 +166,74 @@
 
 .smp-doc[data-orientation="landscape"] .doc-quote-wrap { max-width: 720px; }
 .smp-doc[data-orientation="landscape"].doc-closing .doc-lead { max-width: 560px; }
+
+/* Presentation slides (1920 × 1080): the same pages, drawn twice as large. The inner frame is a 960 × 540
+   landscape page zoomed 2×, so every print size above becomes a presentation size (13 px → 26 px) and the
+   landscape rules apply: photos and galleries beside the text, two columns. Type is a notch larger still. */
+.smp-doc[data-shape="slide"] {
+  --pad-t: 40; --pad-x: 72; --pad-b: 28;
+  --eyebrow: 10; --logo: 22; --mono: 20;
+  --title: 38; --cover-title: 48; --lead: 16.5; --body: 14.5; --text: 15; --quote-size: 38;
+}
+.smp-doc[data-shape="slide"] .smp-inner { zoom: 2; width: 960px; height: 540px; flex: none; font-size: calc(var(--body) * var(--fit) * 1px); line-height: 1.55; }
+.smp-doc[data-shape="slide"] .smp-body { padding-top: 24px; }
+.smp-doc[data-shape="slide"] .doc-foot { font-size: 8.5px; }
+.smp-doc[data-shape="slide"] .doc-table { font-size: calc(13.5 * var(--fit) * 1px); }
+.smp-doc[data-shape="slide"] .doc-table th { font-size: 9px; }
+.smp-doc[data-shape="slide"] .doc-cover-title { max-width: none; }
+.smp-doc[data-shape="slide"].doc-cover .doc-lead { max-width: 560px; }
+.smp-doc[data-shape="slide"] .doc-quote-wrap { max-width: 640px; }
+.smp-doc[data-shape="slide"] .doc-figures { gap: 18px; }
+.smp-doc[data-shape="slide"] .doc-value { font-size: calc(52 * var(--fit) * 1px); }
+.smp-doc[data-shape="slide"].doc-closing .doc-lead { max-width: 600px; }
+
+/* Section divider: a number and a title, centred on the height */
+.deck-section-wrap { height: 100%; display: flex; flex-direction: column; justify-content: center; max-width: 680px; }
+.deck-number { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-variation-settings: "opsz" 144; font-size: calc(64 * var(--fit) * 1px); line-height: 1; letter-spacing: -.02em; color: var(--taupe-logo); margin-bottom: 20px !important; }
+.deck-section-title { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-variation-settings: "opsz" 144; font-size: calc(var(--cover-title) * var(--fit) * 1px); line-height: 1.04; letter-spacing: -.025em; text-wrap: balance; margin-bottom: 18px !important; }
+.smp-layout-deck-section .doc-lead { margin-bottom: 0 !important; }
+
+/* Agenda: the parts, numbered in Fraunces, in two columns */
+.deck-agenda { list-style: none; columns: 2; column-gap: 48px; border-top: 1px solid var(--line); }
+.deck-agenda li { display: flex; gap: 18px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); break-inside: avoid; font-size: calc(17 * var(--fit) * 1px); }
+.deck-agenda-n { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-size: 1.6em; line-height: 1; color: var(--taupe-logo); flex: none; min-width: 1.5em; }
+
+/* Free slides: blocks placed by hand, positioned in the 960 × 540 design space of the inner frame and painted
+   in order. Text blocks use the brand's presets (data-style); their size is set inline by the editor. */
+.smp-doc[data-shape="slide"] .smp-inner { position: relative; }
+.free-layer { position: absolute; inset: 0; }
+.free-block { position: absolute; box-sizing: border-box; }
+.free-text { display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; line-height: 1.55; color: var(--ink); }
+.free-text[data-valign="middle"] { justify-content: center; }
+.free-text[data-valign="bottom"] { justify-content: flex-end; }
+.free-text[data-align="center"] { text-align: center; }
+.free-text[data-align="right"] { text-align: right; }
+.free-text .doc-rich { max-width: none; color: inherit; font-size: inherit; }
+.free-text[data-columns="2"] .doc-rich { columns: 2; column-gap: 48px; }
+.free-text[data-columns="2"] .doc-rich :is(p, li) { break-inside: avoid; }
+.free-text[data-align="center"] .doc-ul li, .free-text[data-align="center"] .doc-ol li { justify-content: center; }
+.free-text[data-style="cover-title"], .free-text[data-style="title"] { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-variation-settings: "opsz" 144; line-height: 1.04; letter-spacing: -.025em; text-wrap: balance; }
+.free-text[data-style="title"] { line-height: 1.06; letter-spacing: -.02em; }
+.free-text[data-style="lead"] { font-weight: 300; line-height: 1.5; color: var(--ink-soft); text-wrap: pretty; }
+.free-text[data-style="body"] { text-wrap: pretty; }
+.free-text[data-style="eyebrow"] { font-weight: 600; letter-spacing: .24em; text-transform: uppercase; color: var(--taupe); line-height: 1.4; }
+.free-text[data-style="small"] { color: #75695f; line-height: 1.45; }
+.free-text[data-style="figure"] { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-variation-settings: "opsz" 144; color: var(--taupe-logo); line-height: 1; letter-spacing: -.02em; }
+.free-text[data-style="price"] { font-family: "Fraunces", Georgia, serif; font-weight: 300; color: var(--taupe-logo); line-height: 1.1; }
+.free-text[data-style="quote"] { font-family: "Fraunces", Georgia, serif; font-weight: 300; font-style: italic; font-variation-settings: "opsz" 144; line-height: 1.25; letter-spacing: -.01em; text-wrap: balance; }
+.free-text[data-style="signature"] { font-family: "Fraunces", Georgia, serif; font-style: italic; font-weight: 300; color: var(--quote); line-height: 1.1; }
+.free-text[data-style="tagline"] { font-family: "Fraunces", Georgia, serif; font-style: italic; font-weight: 300; color: var(--quote); line-height: 1.3; }
+.free-text[data-style="button"] { display: flex; }
+.free-text[data-style="button"] .doc-button { font-size: inherit; }
+.free-text[data-style="button"][data-align="center"] .doc-button { align-self: center; }
+.free-text[data-style="button"][data-align="right"] .doc-button { align-self: flex-end; }
+.free-text.is-ph { opacity: 1; }
+.free-text.is-ph > span { opacity: .35; }
+.free-image { width: 100%; height: 100%; }
+.free-box { background: var(--paper); }
+.free-box[data-accent="true"] { border-left: 2px solid var(--taupe-logo); }
+.free-line { background: var(--line); }
+.free-line[data-strong="true"] { background: var(--rule-strong, #b9aa9b); }
+.free-table .doc-table { width: 100%; }
+.free-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 0 140px; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; line-height: 1.8; color: var(--taupe); opacity: .55; }
+.smp-doc[data-editor="true"] .free-text[data-overflow="true"] { outline: 1px dashed #7c3f2f; outline-offset: 2px; }

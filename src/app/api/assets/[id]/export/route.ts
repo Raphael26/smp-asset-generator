@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const { id } = await params;
     const body = await req.json();
     const kind = body.kind as ExportKind;
-    if (!["png", "pdf", "zip"].includes(kind)) throw new UserFacingError("Unknown export type.");
+    if (!["png", "pdf", "zip", "pptx"].includes(kind)) throw new UserFacingError("Unknown export type.");
     const slide = typeof body.slide === "number" ? body.slide : null;
     // Chrome loads the render page from this same server.
     const origin = new URL(req.url).origin;

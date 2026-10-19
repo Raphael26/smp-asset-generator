@@ -1,8 +1,9 @@
 // Templates ("modèles"): the slots of each slide or document page. The look of each one lives in
 // src/components/slides/slides.css and docs.css; this file only describes the fields.
-import type { GroundId, LayoutId, Slide } from "@/lib/content";
+import type { Block, GroundId, LayoutId, Slide } from "@/lib/content";
 import { makeId } from "@/lib/content";
-import type { Format } from "@/lib/brand/formats";
+import { isDeck, isDocument, type Format } from "@/lib/brand/formats";
+import { titleSlideBlocks } from "@/lib/brand/blocks";
 
 export type FieldKind = "line" | "title" | "text" | "list" | "rich" | "table";
 
@@ -26,8 +27,11 @@ export type LayoutDef = {
   fields: FieldDef[];
   image: "none" | "optional" | "required" | "gallery";
   defaultGround: GroundId;
-  /** Social formats use social templates, A4 documents use document pages; the quote works in both. */
-  kind: "social" | "document" | "both";
+  /** Social formats use social templates; A4 documents use document pages; presentations use the document pages
+   *  and the deck templates; the quote works everywhere. */
+  kind: "social" | "document" | "deck" | "both";
+  /** Laid out by hand in the editor (blocks): Claude never composes it. */
+  manual?: boolean;
 };
 
 const TITLE_HELP = "Wrap the emotional word in *asterisks* to set it in italic taupe. Press Enter for a line break.";
@@ -284,6 +288,45 @@ export const LAYOUTS: LayoutDef[] = [
       { key: "signature", label: "Signature", kind: "line", max: 30, placeholder: "Rebeca", initial: "Rebeca" },
     ],
   },
+  // ——— Presentation slides (16:9): the document pages above, plus a section divider and an agenda ———
+  {
+    id: "deck-section",
+    name: "Section",
+    description: "A divider between two parts of the deck: a number, a title, one line.",
+    image: "none",
+    defaultGround: "stone",
+    kind: "deck",
+    fields: [
+      eyebrow("Deuxième partie"),
+      { key: "number", label: "Number", kind: "line", max: 3, optional: true, placeholder: "02" },
+      { key: "title", label: "Title", kind: "title", max: 60, placeholder: "Ce que la maison *change au travail.*", help: TITLE_HELP },
+      { key: "text", label: "Line", kind: "text", max: 160, optional: true, placeholder: "Trois constats, et ce que l’on peut en faire.", help: TEXT_HELP },
+    ],
+  },
+  {
+    id: "deck-agenda",
+    name: "Agenda",
+    description: "The parts of the presentation, numbered.",
+    image: "none",
+    defaultGround: "cream",
+    kind: "deck",
+    fields: [
+      { ...eyebrow("Au programme"), initial: "Au programme" },
+      { key: "title", label: "Title", kind: "title", max: 50, placeholder: "Une heure trente, *en quatre temps.*", help: TITLE_HELP },
+      { key: "intro", label: "Introduction", kind: "text", max: 200, optional: true, placeholder: "Ce que je vous propose de voir ensemble.", help: TEXT_HELP },
+      { key: "items", label: "Parts", kind: "list", max: 6, placeholder: "Pourquoi la maison pèse sur le travail\nTrois chiffres\nLe programme de l’atelier\nEt maintenant ?", help: "One part per line, six at most. They are numbered for you." },
+    ],
+  },
+  {
+    id: "free",
+    name: "Blank slide",
+    description: "A free canvas: texts, photos, boxes, lines and tables you place and resize yourself.",
+    image: "none",
+    defaultGround: "cream",
+    kind: "deck",
+    manual: true,
+    fields: [eyebrow("Au programme")],
+  },
 ];
 
 export function getLayout(id: LayoutId): LayoutDef {
@@ -294,7 +337,12 @@ export function newSlide(layout: LayoutId, ground?: GroundId): Slide {
   const def = getLayout(layout);
   const fields: Record<string, string> = {};
   for (const f of def.fields) fields[f.key] = f.initial ?? "";
-  return { id: makeId(), layout, ground: ground ?? def.defaultGround, fields, image: null };
+  const slide: Slide = { id: makeId(), layout, ground: ground ?? def.defaultGround, fields, image: null };
+  if (layout === "free") {
+    slide.blocks = [];
+    slide.chrome = "page";
+  }
+  return slide;
 }
 
 /** Pixel size of the photo frame of a layout, used to generate images at the right shape. */
@@ -302,6 +350,12 @@ export function imageFrame(layout: LayoutId, format: Format): { width: number; h
   const kind = getLayout(layout).image;
   if (kind === "none") return null;
   const { width, height, shape } = format;
+  if (shape === "slide") {
+    if (kind === "gallery") return galleryFrame();
+    // Slides put the photo in one half of the slide, beside the text: the margins (144 px), the gap (96 px) and
+    // the header and footer (318 px in all) of docs.css at the deck's 2× zoom.
+    return { width: Math.round((width - 2 * 144 - 96) / 2), height: height - 318 };
+  }
   if (shape === "a4") {
     // Pages have 64px margins; generated photos are sized at twice the page size for a crisp print.
     if (kind === "gallery") return galleryFrame();
@@ -329,23 +383,23 @@ export function galleryFrame() {
 
 export const MAX_GALLERY = 6;
 
-/** Templates available for a format: social ones for social formats, pages for documents. */
+/** Templates available for a format: social ones for social formats, pages for documents, pages and deck slides for presentations. */
 export function layoutsFor(format: Format): LayoutDef[] {
-  const doc = format.shape === "a4";
-  return LAYOUTS.filter((l) => l.kind === "both" || l.kind === (doc ? "document" : "social"));
+  const kinds: LayoutDef["kind"][] = isDocument(format) ? ["document", "both"] : isDeck(format) ? ["document", "deck", "both"] : ["social", "both"];
+  return LAYOUTS.filter((l) => kinds.includes(l.kind));
 }
 
-/** The closest template on the other side, when a slide meets a format it does not belong to. */
-export function equivalentLayout(layout: LayoutId, toDocument: boolean): LayoutId {
-  const toDoc: Partial<Record<LayoutId, LayoutId>> = { cover: "doc-cover", figure: "doc-figures", text: "doc-page", list: "doc-checklist", photo: "doc-photo", cta: "doc-closing" };
-  const toSocial: Partial<Record<LayoutId, LayoutId>> = { "doc-cover": "cover", "doc-figures": "figure", "doc-page": "text", "doc-checklist": "list", "doc-photo": "photo", "doc-closing": "cta", "doc-table": "list", "doc-offer": "list", "doc-moodboard": "photo" };
-  const kind = getLayout(layout).kind;
-  if (kind === "both" || kind === (toDocument ? "document" : "social")) return layout;
-  return (toDocument ? toDoc[layout] : toSocial[layout]) ?? (toDocument ? "doc-page" : "text");
+/** The closest template of a format, when a slide meets a format it does not belong to. */
+export function equivalentLayout(layout: LayoutId, format: Format): LayoutId {
+  if (layoutsFor(format).some((l) => l.id === layout)) return layout;
+  const toDoc: Partial<Record<LayoutId, LayoutId>> = { cover: "doc-cover", figure: "doc-figures", text: "doc-page", list: "doc-checklist", photo: "doc-photo", cta: "doc-closing", "deck-section": "doc-page", "deck-agenda": "doc-checklist", free: "doc-page" };
+  const toSocial: Partial<Record<LayoutId, LayoutId>> = { "doc-cover": "cover", "doc-figures": "figure", "doc-page": "text", "doc-checklist": "list", "doc-photo": "photo", "doc-closing": "cta", "doc-table": "list", "doc-offer": "list", "doc-moodboard": "photo", "deck-section": "cover", "deck-agenda": "list", free: "text" };
+  if (isDocument(format) || isDeck(format)) return toDoc[layout] ?? "doc-page";
+  return toSocial[layout] ?? "text";
 }
 
 // Starting structures offered when creating an asset.
-export type Starter = { id: string; name: string; description: string; slides: { layout: LayoutId; ground?: GroundId; fields?: Record<string, string> }[] };
+export type Starter = { id: string; name: string; description: string; slides: { layout: LayoutId; ground?: GroundId; fields?: Record<string, string>; blocks?: Block[] }[] };
 
 export const CAROUSEL_STARTERS: Starter[] = [
   {
@@ -429,8 +483,64 @@ export const DOCUMENT_STARTERS: Record<string, Starter[]> = {
   ],
 };
 
+export const DECK_STARTERS: Record<string, Starter[]> = {
+  "deck-corporate": [
+    {
+      id: "proposal",
+      name: "Workshop proposal",
+      description: "Cover, agenda, the context, key figures, the programme, the offer, closing.",
+      slides: [
+        { layout: "doc-cover" },
+        { layout: "deck-agenda" },
+        { layout: "deck-section", fields: { number: "01" } },
+        { layout: "doc-page" },
+        { layout: "doc-figures", ground: "paper" },
+        { layout: "deck-section", fields: { number: "02" } },
+        { layout: "doc-table" },
+        { layout: "doc-offer", ground: "paper" },
+        { layout: "doc-closing" },
+      ],
+    },
+    {
+      id: "workshop",
+      name: "The workshop itself",
+      description: "Cover, agenda, two parts with advice, a photo and a checklist, a quote, closing.",
+      slides: [
+        { layout: "doc-cover" },
+        { layout: "deck-agenda" },
+        { layout: "deck-section", fields: { number: "01" } },
+        { layout: "doc-page" },
+        { layout: "doc-photo", ground: "paper" },
+        { layout: "deck-section", fields: { number: "02" } },
+        { layout: "doc-checklist" },
+        { layout: "quote", ground: "paper" },
+        { layout: "doc-closing" },
+      ],
+    },
+    { id: "blank", name: "Blank", description: "A title slide to lay out yourself; add slides as you go.", slides: [{ layout: "free", blocks: titleSlideBlocks() }] },
+  ],
+  "deck-client": [
+    {
+      id: "project",
+      name: "Project presentation",
+      description: "Cover, the intention, moodboard, a photo, shopping list, next steps, closing.",
+      slides: [
+        { layout: "doc-cover" },
+        { layout: "doc-page" },
+        { layout: "doc-moodboard" },
+        { layout: "doc-photo", ground: "paper" },
+        { layout: "doc-table" },
+        { layout: "doc-page", ground: "paper" },
+        { layout: "doc-closing" },
+      ],
+    },
+    { id: "blank", name: "Blank", description: "A title slide to lay out yourself; add slides as you go.", slides: [{ layout: "free", blocks: titleSlideBlocks() }] },
+  ],
+};
+
 export function startersFor(format: Format): Starter[] {
-  if (format.shape === "a4") return DOCUMENT_STARTERS[format.landscapeOf ?? format.id] ?? DOCUMENT_STARTERS["doc-guide"];
+  if (isDocument(format)) return DOCUMENT_STARTERS[format.landscapeOf ?? format.id] ?? DOCUMENT_STARTERS["doc-guide"];
+  if (isDeck(format)) return DECK_STARTERS[format.id] ?? DECK_STARTERS["deck-corporate"];
   return format.multi ? CAROUSEL_STARTERS : SINGLE_STARTERS;
 }
 
@@ -438,6 +548,7 @@ export function slidesFromStarter(starter: Starter): Slide[] {
   return starter.slides.map((s) => {
     const slide = newSlide(s.layout, s.ground);
     if (s.fields) slide.fields = { ...slide.fields, ...s.fields };
+    if (s.blocks) slide.blocks = s.blocks.map((b) => ({ ...b, id: makeId() }));
     return slide;
   });
 }

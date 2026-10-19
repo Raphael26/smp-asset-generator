@@ -2,12 +2,39 @@
 
 import { useState } from "react";
 import type { Media } from "@/lib/db/schema";
-import type { LayoutId, Slide } from "@/lib/content";
+import type { Block, LayoutId, Slide, SlideChrome } from "@/lib/content";
 import { MAX_GALLERY, getLayout, layoutsFor, newSlide } from "@/lib/brand/layouts";
-import type { Format } from "@/lib/brand/formats";
+import { isDeck, type Format } from "@/lib/brand/formats";
 import { GROUNDS } from "@/lib/brand/tokens";
 import { FieldInput } from "./FieldInput";
-import { Icon } from "@/components/ui/Icon";
+import { BlockInspector } from "./BlockInspector";
+import { Icon, type IconName } from "@/components/ui/Icon";
+
+/** The editing callbacks of a free slide (presentations), from the editor. */
+export type FreeHandlers = {
+  selected: string | null;
+  onUnlock: () => void;
+  onAdd: (type: Block["type"]) => void;
+  onChange: (b: Block) => void;
+  onDelete: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onOrder: (id: string, dir: 1 | -1) => void;
+  onPickImage: (id: string) => void;
+};
+
+const CHROMES: [SlideChrome, string][] = [
+  ["page", "Page"],
+  ["cover", "Cover"],
+  ["closing", "Logo only"],
+  ["none", "None"],
+];
+const ADD: [Block["type"], string, IconName][] = [
+  ["text", "Text", "text"],
+  ["image", "Photo", "image"],
+  ["box", "Box", "grid"],
+  ["line", "Line", "layers"],
+  ["table", "Table", "grid"],
+];
 
 export function SlideInspector({
   slide,
@@ -19,6 +46,7 @@ export function SlideInspector({
   format,
   onPickGallery,
   onNewGalleryPhoto,
+  free,
 }: {
   slide: Slide;
   index: number;
@@ -32,14 +60,20 @@ export function SlideInspector({
   onPickGallery: () => void;
   /** Generate the photo Claude described for one cell of the moodboard. */
   onNewGalleryPhoto: (index: number, prompt: string) => void;
+  /** Presentations only: the free-slide tools. */
+  free?: FreeHandlers;
 }) {
   const def = getLayout(slide.layout);
   const image = slide.image ? media.find((m) => m.id === slide.image!.mediaId) : null;
   // A photo Claude described but nobody generated yet: show its prompt and button straight away.
   const [promptOpen] = useState(() => !slide.image && !slide.photoJob);
 
+  const selectedBlock = free?.selected ? (slide.blocks ?? []).find((b) => b.id === free.selected) : undefined;
+
   const changeLayout = (layout: LayoutId) => {
     if (layout === slide.layout) return;
+    // « Blank slide » on a template: unlock it, so it keeps its look as blocks.
+    if (layout === "free") return free?.onUnlock();
     // Keep what was written in fields the new template also has.
     const fresh = newSlide(layout, slide.ground);
     const fields = { ...fresh.fields };
@@ -47,7 +81,7 @@ export function SlideInspector({
     if (!fields.body && slide.fields.text && "body" in fields) fields.body = slide.fields.text;
     if (!fields.text && slide.fields.body && "text" in fields) fields.text = slide.fields.body;
     const kind = getLayout(layout).image;
-    onChange({ ...slide, layout, fields, image: kind === "none" || kind === "gallery" ? null : slide.image, gallery: kind === "gallery" ? (slide.gallery ?? []) : slide.gallery });
+    onChange({ ...slide, layout, fields, image: kind === "none" || kind === "gallery" ? null : slide.image, gallery: kind === "gallery" ? (slide.gallery ?? []) : slide.gallery, blocks: undefined, chrome: undefined });
   };
 
   const setImage = (patch: Partial<NonNullable<Slide["image"]>>) => slide.image && onChange({ ...slide, image: { ...slide.image, ...patch } });
@@ -69,6 +103,11 @@ export function SlideInspector({
           ))}
         </div>
         <p className="mt-2 text-[12px] leading-snug text-muted">{def.description}</p>
+        {free && slide.layout !== "free" && (
+          <button className="btn btn-outline btn-sm mt-3 w-full" onClick={free.onUnlock} title="Turns this slide into blocks you can move, resize and retype. It keeps its look.">
+            <Icon name="layers" size={14} /> Unlock: move and resize its parts
+          </button>
+        )}
       </section>
 
       <section>
@@ -87,6 +126,52 @@ export function SlideInspector({
           ))}
         </div>
       </section>
+
+      {free && (
+        <section>
+          <p className="label">Add a block</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {ADD.map(([type, label, icon]) => (
+              <button key={type} className="flex flex-col items-center gap-1 border border-line py-2 text-[11.5px] text-ink-soft hover:border-rule hover:bg-cream" onClick={() => free.onAdd(type)}>
+                <Icon name={icon} size={15} />
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[11.5px] leading-snug text-muted">
+            {slide.layout === "free"
+              ? "Drag a block to move it, pull its corners to resize it, double-click a text to type in it. Hold ⌥ to move without snapping."
+              : "Adding a block unlocks the slide: its parts become blocks you can move and resize too."}
+          </p>
+        </section>
+      )}
+
+      {free && slide.layout === "free" && (
+        <>
+          <section>
+            <p className="label">Logo and footer</p>
+            <div className="flex flex-wrap gap-1.5">
+              {CHROMES.map(([id, label]) => (
+                <button key={id} className="chip" aria-pressed={(slide.chrome ?? "page") === id} onClick={() => onChange({ ...slide, chrome: id })}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </section>
+          {selectedBlock && (
+            <BlockInspector
+              key={selectedBlock.id}
+              block={selectedBlock}
+              index={index}
+              onChange={free.onChange}
+              onDelete={() => free.onDelete(selectedBlock.id)}
+              onDuplicate={() => free.onDuplicate(selectedBlock.id)}
+              onOrder={(dir) => free.onOrder(selectedBlock.id, dir)}
+              onPickImage={() => free.onPickImage(selectedBlock.id)}
+            />
+          )}
+        </>
+      )}
 
       {def.image === "gallery" && (
         <section>
@@ -213,6 +298,26 @@ export function SlideInspector({
           />
         ))}
       </section>
+
+      {isDeck(format) && (
+        <section className="border-t border-line pt-5">
+          <div className="mb-1.5 flex items-baseline justify-between">
+            <label className="label mb-0" htmlFor={`notes-${index}`}>
+              Speaker notes
+            </label>
+            <span className="text-[11px] text-muted tabular-nums">{(slide.notes ?? "").length} characters</span>
+          </div>
+          <textarea
+            id={`notes-${index}`}
+            className="field"
+            rows={Math.min(10, Math.max(4, (slide.notes ?? "").split("\n").length + 1))}
+            placeholder="What you say on this slide: two to five sentences."
+            value={slide.notes ?? ""}
+            onChange={(e) => onChange({ ...slide, notes: e.target.value })}
+          />
+          <p className="mt-1 text-[11.5px] leading-snug text-muted">Not drawn on the slide. Exported with the PowerPoint as the slide’s notes; Claude reads them when you ask for a change.</p>
+        </section>
+      )}
     </div>
   );
 }

@@ -73,7 +73,7 @@ export default function NewAssetPage() {
         <h2 className="mb-5 flex items-baseline gap-3 font-display text-[24px] font-light">
           <span className="text-taupe-logo">1</span> Format
         </h2>
-        <div className="grid grid-cols-4 gap-5">
+        <div className="grid grid-cols-5 gap-5">
           {PLATFORMS.map((p) => (
             <div key={p}>
               <p className="eyebrow mb-3">{p}</p>
@@ -95,7 +95,7 @@ export default function NewAssetPage() {
                       <span>
                         <span className="block text-[14px] font-medium">{f.name}</span>
                         <span className="block text-[12px] text-muted">
-                          {f.shape === "a4" ? "A4 PDF" : `${f.width} × ${f.height}`} · {f.hint}
+                          {f.shape === "a4" ? "A4 PDF" : f.shape === "slide" ? "16:9 · PowerPoint or PDF" : `${f.width} × ${f.height}`} · {f.hint}
                         </span>
                       </span>
                     </button>

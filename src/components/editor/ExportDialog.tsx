@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Asset } from "@/lib/db/schema";
-import { getFormat, isLandscape } from "@/lib/brand/formats";
+import { getFormat, isDeck, isLandscape } from "@/lib/brand/formats";
 import { Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
 import { api, relativeTime } from "@/components/ui/api";
@@ -40,7 +40,7 @@ export function ExportDialog({
     api<{ exports: ExportRow[] }>(`/api/assets/${asset.id}/export`).then((d) => setHistory(d.exports));
   }, [open, asset.id]);
 
-  const run = async (kind: "png" | "pdf" | "zip", slide: number | null, label: string) => {
+  const run = async (kind: "png" | "pdf" | "zip" | "pptx", slide: number | null, label: string) => {
     setBusy(label);
     try {
       await flush();
@@ -59,8 +59,12 @@ export function ExportDialog({
     }
   };
 
-  const options: { kind: "png" | "pdf" | "zip"; slide: number | null; label: string; detail: string; primary?: boolean }[] = [];
-  if (format.shape === "a4") {
+  const options: { kind: "png" | "pdf" | "zip" | "pptx"; slide: number | null; label: string; detail: string; primary?: boolean }[] = [];
+  if (isDeck(format)) {
+    options.push({ kind: "pptx", slide: null, label: "PowerPoint", detail: `${total} slide${total > 1 ? "s" : ""} in 16:9, one picture per slide with your speaker notes. Opens in PowerPoint, Keynote and Google Slides, exactly as previewed.`, primary: true });
+    options.push({ kind: "pdf", slide: null, label: "PDF", detail: "To send, or to present without PowerPoint." });
+    options.push({ kind: "zip", slide: null, label: "Slides as images", detail: "A ZIP with each slide as a PNG and the PDF." });
+  } else if (format.shape === "a4") {
     options.push({ kind: "pdf", slide: null, label: "PDF document", detail: `A4${isLandscape(format) ? " landscape" : ""}, ${total} page${total > 1 ? "s" : ""}, with selectable text and clickable links. Ready to e-mail or print.`, primary: true });
     options.push({ kind: "zip", slide: null, label: "Pages as images", detail: "A ZIP with each page as a PNG (to post on social media) and the PDF." });
   } else if (format.id === "linkedin-carousel") {

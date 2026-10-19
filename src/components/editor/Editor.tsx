@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Asset, Job, Media } from "@/lib/db/schema";
-import type { AssetContent, AssetOptions, LayoutId, Slide } from "@/lib/content";
+import type { AssetContent, AssetOptions, Block, LayoutId, Slide } from "@/lib/content";
 import { makeId } from "@/lib/content";
-import { formatLabel, getFormat, unitName, withOrientation } from "@/lib/brand/formats";
+import { DECK_DESIGN, formatLabel, getFormat, isDeck, unitName, withOrientation } from "@/lib/brand/formats";
 import { MAX_GALLERY, galleryFrame, imageFrame, newSlide } from "@/lib/brand/layouts";
+import { newBlock } from "@/lib/brand/blocks";
+import { unlockSlide } from "./unlock";
 import { lintContent, SEVERITY_ORDER, type Issue } from "@/lib/brand/lint";
 import { api } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
@@ -37,7 +39,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const [tab, setTab] = useState<"slide" | "post">("slide");
   const [dialog, setDialog] = useState<Dialog>(null);
   // The photo picker fills the slide's photo, or adds a photo to a moodboard.
-  const [pickerTarget, setPickerTarget] = useState<"image" | "gallery">("image");
+  const [pickerTarget, setPickerTarget] = useState<"image" | "gallery" | { block: string }>("image");
   const [save, setSave] = useState<SaveState>("saved");
   const [overflow, setOverflow] = useState<Record<string, boolean>>({});
   const [keys, setKeys] = useState({ anthropic: true, replicate: true });
@@ -45,6 +47,15 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const [proposal, setProposal] = useState<{ mode: "edit" | "regenerate"; data: Proposal; prompt: string } | null>(null);
   const [promptBusy, setPromptBusy] = useState<"edit" | "regenerate" | null>(null);
   const [showNotes, setShowNotes] = useState(created);
+  // Free slides: the selected block, a block to start typing in, the copied block, and the undo history of block changes.
+  const [selectedFor, setSelectedFor] = useState<{ slide: number; id: string | null }>({ slide: -1, id: null });
+  const selectedBlock = selectedFor.slide === current ? selectedFor.id : null;
+  const setSelectedBlock = useCallback((id: string | null, slideIndex?: number) => setSelectedFor({ slide: slideIndex ?? current, id }), [current]);
+  const [editRequest, setEditRequest] = useState<string | null>(null);
+  const clip = useRef<Block | null>(null);
+  const undoStack = useRef<AssetContent[]>([]);
+  const redoStack = useRef<AssetContent[]>([]);
+  const lastUndo = useRef(0);
 
   // Autosave: every change bumps `version`; a save sends the latest asset and remembers which version it was.
   const latest = useRef<Asset | null>(null);
@@ -112,6 +123,83 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     [persist],
   );
 
+  // Undo history of the block changes on free slides (⌘Z); rapid changes within 400 ms share one step.
+  const pushUndo = useCallback(() => {
+    const a = latest.current;
+    if (!a) return;
+    const now = Date.now();
+    if (now - lastUndo.current < 400) return;
+    lastUndo.current = now;
+    undoStack.current.push(structuredClone(a.content));
+    if (undoStack.current.length > 60) undoStack.current.shift();
+    redoStack.current = [];
+  }, []);
+  const undo = useCallback(() => {
+    const prev = undoStack.current.pop();
+    const a = latest.current;
+    if (!prev || !a) return;
+    redoStack.current.push(structuredClone(a.content));
+    lastUndo.current = 0;
+    update((x) => ({ ...x, content: prev }));
+  }, [update]);
+  const redo = useCallback(() => {
+    const next = redoStack.current.pop();
+    const a = latest.current;
+    if (!next || !a) return;
+    undoStack.current.push(structuredClone(a.content));
+    lastUndo.current = 0;
+    update((x) => ({ ...x, content: next }));
+  }, [update]);
+  // Changes the blocks of a slide, with an undo step first.
+  const editBlocks = useCallback(
+    (slideIndex: number, fn: (blocks: Block[]) => Block[], snapshot = true) => {
+      if (snapshot) pushUndo();
+      update((a) => ({ ...a, content: { ...a.content, slides: a.content.slides.map((s, i) => (i === slideIndex ? { ...s, blocks: fn(s.blocks ?? []) } : s)) } }));
+    },
+    [pushUndo, update],
+  );
+  const blockAt = useCallback((id: string) => latest.current?.content.slides[current]?.blocks?.find((b) => b.id === id), [current]);
+  const deleteBlock = useCallback(
+    (id: string) => {
+      editBlocks(current, (bs) => bs.filter((b) => b.id !== id));
+      setSelectedBlock(null);
+    },
+    [current, editBlocks, setSelectedBlock],
+  );
+  const duplicateBlock = useCallback(
+    (id: string) => {
+      const b = blockAt(id);
+      if (!b) return;
+      const copy = { ...structuredClone(b), id: makeId(), x: b.x + 16, y: b.y + 16 };
+      editBlocks(current, (bs) => {
+        const i = bs.findIndex((x) => x.id === id);
+        return [...bs.slice(0, i + 1), copy, ...bs.slice(i + 1)];
+      });
+      setSelectedBlock(copy.id);
+    },
+    [blockAt, current, editBlocks, setSelectedBlock],
+  );
+  const orderBlock = useCallback(
+    (id: string, dir: 1 | -1) =>
+      editBlocks(current, (bs) => {
+        const i = bs.findIndex((b) => b.id === id);
+        const j = i + dir;
+        if (i < 0 || j < 0 || j >= bs.length) return bs;
+        const n = [...bs];
+        [n[i], n[j]] = [n[j], n[i]];
+        return n;
+      }),
+    [current, editBlocks],
+  );
+  const nudgeBlock = useCallback((id: string, dx: number, dy: number) => editBlocks(current, (bs) => bs.map((b) => (b.id === id ? { ...b, x: b.x + dx, y: b.y + dy } : b))), [current, editBlocks]);
+  const pasteBlock = useCallback(() => {
+    const c = clip.current;
+    if (!c) return;
+    const copy = { ...structuredClone(c), id: makeId(), x: c.x + 16, y: c.y + 16 };
+    editBlocks(current, (bs) => [...bs, copy]);
+    setSelectedBlock(copy.id);
+  }, [current, editBlocks, setSelectedBlock]);
+
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (version.current !== savedVersion.current) e.preventDefault();
@@ -128,24 +216,79 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const total = asset?.content.slides.length ?? 0;
   const setCurrent = useCallback((i: number) => setCurrentRaw(Math.max(0, Math.min(i, total - 1))), [total]);
 
-  // ← → move between slides when not typing.
+  // Keys, when not typing: ← → between slides. On a free slide with a block selected: ⌫ deletes it, arrows nudge it
+  // (Shift: by 10), ⌘D duplicates, ⌘C / ⌘V copy and paste it (to any free slide), ⌘[ ⌘] reorder it, Esc deselects.
+  // ⌘Z / ⇧⌘Z undo and redo block changes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (dialog || /input|textarea|select/i.test(t.tagName) || t.isContentEditable) return;
+      const meta = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
+      if (meta && key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      const s = latest.current?.content.slides[current];
+      const free = s?.layout === "free";
+      const sel = free && selectedBlock ? (s?.blocks ?? []).find((b) => b.id === selectedBlock) : undefined;
+      if (free && meta && key === "v" && clip.current) {
+        e.preventDefault();
+        pasteBlock();
+        return;
+      }
+      if (sel) {
+        if (meta && key === "c") {
+          clip.current = sel;
+          return;
+        }
+        if (e.key === "Backspace" || e.key === "Delete") {
+          e.preventDefault();
+          deleteBlock(sel.id);
+          return;
+        }
+        if (meta && key === "d") {
+          e.preventDefault();
+          duplicateBlock(sel.id);
+          return;
+        }
+        if (meta && (e.key === "]" || e.key === "[")) {
+          e.preventDefault();
+          orderBlock(sel.id, e.key === "]" ? 1 : -1);
+          return;
+        }
+        if (e.key === "Escape") {
+          setSelectedBlock(null);
+          return;
+        }
+        if (e.key.startsWith("Arrow")) {
+          e.preventDefault();
+          const d = e.shiftKey ? 10 : 1;
+          nudgeBlock(sel.id, e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0, e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0);
+          return;
+        }
+      }
       if (e.key === "ArrowLeft") setCurrent(current - 1);
       if (e.key === "ArrowRight") setCurrent(current + 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, dialog, setCurrent]);
+  }, [current, dialog, setCurrent, selectedBlock, setSelectedBlock, undo, redo, pasteBlock, deleteBlock, duplicateBlock, orderBlock, nudgeBlock]);
 
   const aiIds = useMemo(() => new Set(media.filter((m) => m.isAi).map((m) => m.id)), [media]);
   const issues = useMemo<Issue[]>(() => {
     if (!asset) return [];
-    const list = lintContent(asset.content, { aiMediaIds: aiIds });
+    const list = lintContent(asset.content, { aiMediaIds: aiIds, format: getFormat(asset.formatId) });
     asset.content.slides.forEach((s, i) => {
-      if (overflow[s.id]) list.unshift({ severity: "error", slide: i, field: null, message: "The text doesn’t fit, even with smaller type: shorten it." });
+      if (overflow[s.id])
+        list.unshift({
+          severity: "error",
+          slide: i,
+          field: null,
+          message: s.layout === "free" ? "A text block is fuller than its box (dashed outline): enlarge the box or shorten the text." : "The text doesn’t fit, even with smaller type: shorten it.",
+        });
     });
     return list.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
   }, [asset, aiIds, overflow]);
@@ -244,6 +387,38 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     setCurrentRaw(Math.max(0, Math.min(current, total - 2)));
   };
 
+  // Free slides: unlock a template slide into blocks (it keeps its look), and add a block. Adding to a template
+  // slide unlocks it first; a new text block opens for typing at once.
+  const unlockCurrent = (): Slide | null => {
+    const el = document.querySelector<HTMLElement>("#stage-slide .smp-slide");
+    if (!el || !slide || slide.layout === "free") return slide ?? null;
+    pushUndo();
+    const unlocked = unlockSlide(el, slide);
+    setSlides((all) => all.map((s) => (s.id === slide.id ? unlocked : s)));
+    setSelectedBlock(null);
+    return unlocked;
+  };
+  const addBlock = (type: Block["type"]) => {
+    const b = newBlock(type);
+    if (slide && slide.layout !== "free") {
+      const unlocked = unlockCurrent();
+      if (!unlocked) return;
+      setSlides((all) => all.map((s) => (s.id === slide.id ? { ...s, blocks: [...(s.blocks ?? []), b] } : s)));
+      toast("Slide unlocked: its parts are now blocks you can move and resize too.", "success");
+    } else editBlocks(current, (bs) => [...bs, b]);
+    setSelectedBlock(b.id);
+    if (type === "text") setEditRequest(b.id);
+  };
+  const blockOf = (id: string) => (slide?.blocks ?? []).find((b) => b.id === id);
+  const blockFrame = (id: string) => {
+    const b = blockOf(id);
+    return b ? { width: Math.round(b.w * DECK_DESIGN.zoom), height: Math.round(b.h * DECK_DESIGN.zoom) } : null;
+  };
+  const openBlockPicker = (id: string) => {
+    setPickerTarget({ block: id });
+    setDialog("picker");
+  };
+
   const startPhotos = async (items: { slideId: string; prompt: string; galleryIndex?: number }[]) => {
     if (!items.length) return;
     if (!keys.replicate) {
@@ -311,6 +486,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     }
     setCurrentRaw(i.slide);
     setTab("slide");
+    if (i.field?.startsWith("block:")) return setSelectedBlock(i.field.slice(6), i.slide);
     if (i.field) setTimeout(() => document.getElementById(`field-${i.slide}-${i.field}`)?.focus(), 80);
   };
 
@@ -392,6 +568,13 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
             onFit={onFit}
             onIssue={goToIssue}
             onOrientation={(l) => update((a) => ({ ...a, formatId: withOrientation(getFormat(a.formatId), l).id }))}
+            selectedBlock={selectedBlock}
+            onSelectBlock={setSelectedBlock}
+            onChangeSlide={(fn) => setSlides((all) => all.map((s, i) => (i === current ? fn(s) : s)))}
+            onSnapshot={pushUndo}
+            editRequest={editRequest}
+            onEditDone={() => setEditRequest(null)}
+            onPickBlockImage={openBlockPicker}
           />
           <PromptBar
             key={asset.prompt ?? "none"}
@@ -437,6 +620,20 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
                   setDialog("picker");
                 }}
                 onNewGalleryPhoto={(galleryIndex, prompt) => startPhotos([{ slideId: slide.id, prompt, galleryIndex }])}
+                free={
+                  isDeck(format)
+                    ? {
+                        selected: selectedBlock,
+                        onUnlock: unlockCurrent,
+                        onAdd: addBlock,
+                        onChange: (b) => editBlocks(current, (bs) => bs.map((x) => (x.id === b.id ? b : x))),
+                        onDelete: deleteBlock,
+                        onDuplicate: duplicateBlock,
+                        onOrder: orderBlock,
+                        onPickImage: openBlockPicker,
+                      }
+                    : undefined
+                }
               />
             ) : (
               <PostInspector
@@ -464,12 +661,17 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
         onClose={() => setDialog(null)}
         media={media}
         setMedia={(fn) => setMedia(fn)}
-        frame={slide ? (pickerTarget === "gallery" ? galleryFrame() : imageFrame(slide.layout, format)) : null}
+        frame={slide ? (typeof pickerTarget === "object" ? blockFrame(pickerTarget.block) : pickerTarget === "gallery" ? galleryFrame() : imageFrame(slide.layout, format)) : null}
         assetId={asset.id}
-        currentId={pickerTarget === "gallery" ? null : (slide?.image?.mediaId ?? null)}
-        initialPrompt={pickerTarget === "gallery" ? null : (slide?.photoPrompt ?? null)}
-        onPick={(mediaId) =>
-          slide &&
+        currentId={typeof pickerTarget === "object" ? ((b) => (b?.type === "image" ? (b.image?.mediaId ?? null) : null))(blockOf(pickerTarget.block)) : pickerTarget === "gallery" ? null : (slide?.image?.mediaId ?? null)}
+        initialPrompt={pickerTarget === "image" ? (slide?.photoPrompt ?? null) : null}
+        onPick={(mediaId) => {
+          if (!slide) return;
+          if (typeof pickerTarget === "object") {
+            const id = pickerTarget.block;
+            editBlocks(current, (bs) => bs.map((b) => (b.id === id && b.type === "image" ? { ...b, image: { mediaId, focusX: 50, focusY: 40, zoom: 1 } } : b)));
+            return;
+          }
           setSlides((all) =>
             all.map((x) =>
               x.id !== slide.id
@@ -478,8 +680,8 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
                   ? { ...x, gallery: [...(x.gallery ?? []), { image: { mediaId, focusX: 50, focusY: 50, zoom: 1 } }].slice(0, MAX_GALLERY) }
                   : { ...x, image: { mediaId, focusX: 50, focusY: 40, zoom: 1 } },
             ),
-          )
-        }
+          );
+        }}
       />
       {dialog === "improve" && (
       <ImproveDialog
