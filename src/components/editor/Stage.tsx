@@ -69,6 +69,9 @@ export function Stage({
     if (id === null && editRequest) onEditDone();
   };
   const mine = issues.filter((i) => i.slide === current);
+  const unit = unitName(format);
+  // On a free slide the arrows nudge a selected block, so the hint names the keys that always turn the slide.
+  const keys = total > 1 ? ` · ${free ? "Page ↑ ↓" : "← →"} change ${unit}` : "";
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-stone/60">
@@ -110,7 +113,7 @@ export function Stage({
       <div className="flex min-h-[64px] items-start justify-between gap-6 border-t border-line bg-paper/70 px-6 py-3">
         <div className="flex shrink-0 items-center gap-2 pt-1">
           {total > 1 && (
-            <button className="btn btn-ghost btn-sm" disabled={current === 0} onClick={() => setCurrent(current - 1)} aria-label={`Previous ${unitName(format)}`}>
+            <button className="btn btn-ghost btn-sm" disabled={current === 0} onClick={() => setCurrent(current - 1)} aria-label={`Previous ${unit}`} title={`Previous ${unit} · ← or Page ↑`}>
               <Icon name="chevronLeft" size={16} />
             </button>
           )}
@@ -119,7 +122,7 @@ export function Stage({
             {slide ? getLayout(slide.layout).name : ""} · {format.shape === "a4" ? (isLandscape(format) ? "A4 landscape" : "A4") : isDeck(format) ? "16:9 slide" : `${format.width} × ${format.height}`}
           </span>
           {total > 1 && (
-            <button className="btn btn-ghost btn-sm" disabled={current === total - 1} onClick={() => setCurrent(current + 1)} aria-label={`Next ${unitName(format)}`}>
+            <button className="btn btn-ghost btn-sm" disabled={current === total - 1} onClick={() => setCurrent(current + 1)} aria-label={`Next ${unit}`} title={`Next ${unit} · → or Page ↓`}>
               <Icon name="chevronRight" size={16} />
             </button>
           )}
@@ -129,7 +132,7 @@ export function Stage({
               <OrientationChoice landscape={isLandscape(format)} onChange={onOrientation} />
             </div>
           )}
-          <span className="ml-3 hidden text-[11.5px] text-muted xl:inline">{free ? "Drag to move · double-click a text to type · ⌫ delete · ⌘Z undo · ⌥ drag without snapping" : "Click a text to change it on the slide"}</span>
+          <span className="ml-3 hidden text-[11.5px] text-muted xl:inline">{(free ? "Drag to move · double-click a text to type · ⌫ delete · ⌘Z undo · ⌥ drag without snapping" : "Click a text to change it on the slide") + keys}</span>
         </div>
         <ul className="flex max-w-[60%] flex-col items-end gap-1">
           {mine.slice(0, 3).map((i, k) => (

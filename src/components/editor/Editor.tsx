@@ -216,14 +216,25 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const total = asset?.content.slides.length ?? 0;
   const setCurrent = useCallback((i: number) => setCurrentRaw(Math.max(0, Math.min(i, total - 1))), [total]);
 
-  // Keys, when not typing: ← → between slides. On a free slide with a block selected: ⌫ deletes it, arrows nudge it
+  // Keys, when not typing: ← → ↑ ↓ between slides, Home / End to the first and last; Page ↑ ↓ turn the slide even
+  // from the prompt bar or with a block selected. On a free slide with a block selected: ⌫ deletes it, arrows nudge it
   // (Shift: by 10), ⌘D duplicates, ⌘C / ⌘V copy and paste it (to any free slide), ⌘[ ⌘] reorder it, Esc deselects.
   // ⌘Z / ⇧⌘Z undo and redo block changes.
   useEffect(() => {
+    const go = (e: KeyboardEvent, i: number) => {
+      e.preventDefault();
+      setCurrent(i);
+    };
     const onKey = (e: KeyboardEvent) => {
+      if (dialog) return;
       const t = e.target as HTMLElement;
-      if (dialog || /input|textarea|select/i.test(t.tagName) || t.isContentEditable) return;
+      const tag = t.tagName?.toLowerCase();
       const meta = e.metaKey || e.ctrlKey;
+      const plain = !meta && !e.altKey;
+      // A textarea or a list keeps the Page keys for itself; a single-line input has no use for them.
+      const typing = tag === "textarea" || tag === "select" || t.isContentEditable;
+      if (plain && (e.key === "PageUp" || e.key === "PageDown") && !typing) return go(e, current + (e.key === "PageUp" ? -1 : 1));
+      if (typing || tag === "input") return;
       const key = e.key.toLowerCase();
       if (meta && key === "z") {
         e.preventDefault();
@@ -270,12 +281,15 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
           return;
         }
       }
-      if (e.key === "ArrowLeft") setCurrent(current - 1);
-      if (e.key === "ArrowRight") setCurrent(current + 1);
+      if (!plain) return;
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") go(e, current - 1);
+      if (e.key === "ArrowRight" || e.key === "ArrowDown") go(e, current + 1);
+      if (e.key === "Home") go(e, 0);
+      if (e.key === "End") go(e, total - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, dialog, setCurrent, selectedBlock, setSelectedBlock, undo, redo, pasteBlock, deleteBlock, duplicateBlock, orderBlock, nudgeBlock]);
+  }, [current, total, dialog, setCurrent, selectedBlock, setSelectedBlock, undo, redo, pasteBlock, deleteBlock, duplicateBlock, orderBlock, nudgeBlock]);
 
   const aiIds = useMemo(() => new Set(media.filter((m) => m.isAi).map((m) => m.id)), [media]);
   const issues = useMemo<Issue[]>(() => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Asset } from "@/lib/db/schema";
 import type { LayoutId } from "@/lib/content";
 import { getFormat, unitName } from "@/lib/brand/formats";
@@ -33,12 +33,17 @@ export function SlideRail({
   const slides = asset.content.slides;
   const [menu, setMenu] = useState(false);
   const thumbW = 128;
+  const rail = useRef<HTMLDivElement>(null);
+  // Keep the current thumbnail in view when the slide changes from the keyboard or the stage.
+  useEffect(() => {
+    rail.current?.querySelector(`[data-rail="${current}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [current]);
 
   return (
-    <div className="scroll-thin flex w-[184px] shrink-0 flex-col overflow-y-auto border-r border-line bg-paper">
+    <div ref={rail} className="scroll-thin flex w-[184px] shrink-0 flex-col overflow-y-auto border-r border-line bg-paper">
       <div className="flex flex-col gap-4 p-4">
         {slides.map((s, i) => (
-          <div key={s.id} className="group relative">
+          <div key={s.id} data-rail={i} className="group relative">
             <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted">
               <span className={current === i ? "font-semibold text-ink" : ""}>
                 {i + 1} · {getLayout(s.layout).name}
