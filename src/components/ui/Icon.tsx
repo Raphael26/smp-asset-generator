@@ -29,6 +29,9 @@ const PATHS: Record<string, string> = {
   eye: "M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
   text: "M5 6h14M12 6v13M9 19h6",
   send: "M4 12 20 4l-4 16-4-6.5zM12 13.5 20 4",
+  undo: "M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3",
+  redo: "m15 14 5-5-5-5M20 9H10a6 6 0 0 0 0 12h3",
+  save: "M5 4h11l3 3v13H5zM8 4v5h7V4M8 20v-6h8v6",
 };
 
 export type IconName = keyof typeof PATHS;

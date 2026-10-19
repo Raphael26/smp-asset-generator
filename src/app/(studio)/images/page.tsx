@@ -5,6 +5,7 @@ import type { Job, Media } from "@/lib/db/schema";
 import { api, shortDate, usd } from "@/components/ui/api";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toaster";
 import { MediaGrid, MediaToolbar, filterMedia, type MediaFilter } from "@/components/images/MediaGrid";
 import { GeneratePanel } from "@/components/images/GeneratePanel";
@@ -40,8 +41,8 @@ export default function ImagesPage() {
     setOpen(updated);
   };
 
+  const [toDelete, setToDelete] = useState<Media | null>(null);
   const remove = async (m: Media) => {
-    if (!confirm("Delete this image? Slides that use it will show an empty frame.")) return;
     await api(`/api/media/${m.id}`, { method: "DELETE" });
     setMedia((list) => list?.filter((x) => x.id !== m.id) ?? null);
     setOpen(null);
@@ -163,7 +164,7 @@ export default function ImagesPage() {
                 <a className="btn btn-ghost btn-sm" href={`/api/media/${open.id}/file?download`}>
                   <Icon name="download" size={14} /> Download
                 </a>
-                <button className="btn btn-ghost btn-sm text-flag" onClick={() => remove(open)}>
+                <button className="btn btn-ghost btn-sm text-flag" onClick={() => setToDelete(open)}>
                   <Icon name="trash" size={14} /> Delete
                 </button>
               </div>
@@ -171,6 +172,13 @@ export default function ImagesPage() {
           </div>
         )}
       </Modal>
+      <ConfirmDialog
+        open={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => toDelete && remove(toDelete)}
+        title={<>Delete this image?</>}
+        message="Slides that use it will show an empty frame."
+      />
     </div>
   );
 }

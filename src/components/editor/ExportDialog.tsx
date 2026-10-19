@@ -120,7 +120,15 @@ export function ExportDialog({
             </ul>
             <div className="mt-3 flex flex-wrap gap-2">
               {asset.content.caption.trim() && (
-                <button className="btn btn-outline btn-sm" onClick={() => navigator.clipboard.writeText(asset.content.caption).then(() => toast("Caption copied.", "success"))}>
+                <button
+                  className="btn btn-outline btn-sm"
+                  onClick={() =>
+                    navigator.clipboard
+                      .writeText(asset.content.caption)
+                      .then(() => toast("Caption copied.", "success"))
+                      .catch(() => toast("Copying is blocked here: select the caption and copy it.", "error"))
+                  }
+                >
                   <Icon name="copy" size={14} /> Copy the caption
                 </button>
               )}

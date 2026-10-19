@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/Icon";
 import { useToast } from "@/components/ui/Toaster";
 import { AssetThumb } from "@/components/studio/AssetThumb";
 import { NewPresentation } from "@/components/studio/NewPresentation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { StatusBadge } from "@/components/studio/StatusBadge";
 
 const STATUSES = [
@@ -49,8 +50,8 @@ export default function LibraryPage() {
     const { asset } = await api<{ asset: Asset }>(`/api/assets/${a.id}/duplicate`, { method: "POST" });
     router.push(`/assets/${asset.id}`);
   };
+  const [toDelete, setToDelete] = useState<Asset | null>(null);
   const remove = async (a: Asset) => {
-    if (!confirm(`Delete « ${a.title} »? Its exports and versions go too. This cannot be undone.`)) return;
     await api(`/api/assets/${a.id}`, { method: "DELETE" });
     toast("Asset deleted.");
     load();
@@ -148,7 +149,7 @@ export default function LibraryPage() {
                     <button className="btn btn-ghost btn-sm" title="Duplicate" onClick={() => duplicate(a)}>
                       <Icon name="copy" size={15} />
                     </button>
-                    <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => remove(a)}>
+                    <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => setToDelete(a)}>
                       <Icon name="trash" size={15} />
                     </button>
                   </div>
@@ -166,6 +167,17 @@ export default function LibraryPage() {
           })}
         </div>
       )}
+      <ConfirmDialog
+        open={toDelete !== null}
+        onClose={() => setToDelete(null)}
+        onConfirm={() => toDelete && remove(toDelete)}
+        title={
+          <>
+            Delete <em>{toDelete?.title}</em>?
+          </>
+        }
+        message="Its exports and versions go too. This cannot be undone."
+      />
       <p className="mt-16 text-[12px] text-muted">
         {FORMATS.length} formats available · Everything is saved on this computer, in the project’s data folder.
       </p>

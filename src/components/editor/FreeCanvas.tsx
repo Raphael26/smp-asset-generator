@@ -124,7 +124,6 @@ export function FreeCanvas({
   selected,
   onSelect,
   onChange,
-  onSnapshot,
   editing,
   onEditing,
   onPickImage,
@@ -134,8 +133,6 @@ export function FreeCanvas({
   selected: string | null;
   onSelect: (id: string | null) => void;
   onChange: (fn: (s: Slide) => Slide) => void;
-  /** Records an undo step; called before a change starts. */
-  onSnapshot: () => void;
   /** The text block being typed in; the stage opens a block just added at once. */
   editing: string | null;
   onEditing: (id: string | null) => void;
@@ -161,7 +158,6 @@ export function FreeCanvas({
   const commitEdit = () => {
     if (!editingBlock) return;
     if (draft !== editingBlock.text) {
-      onSnapshot();
       const id = editingBlock.id;
       onChange((s) => ({ ...s, blocks: (s.blocks ?? []).map((b) => (b.id === id && b.type === "text" ? { ...b, text: draft } : b)) }));
     }
@@ -193,7 +189,6 @@ export function FreeCanvas({
     if (!d.moved) {
       if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
       d.moved = true;
-      onSnapshot();
     }
     const others = blocks.filter((b) => b.id !== d.id);
     let next: Block;

@@ -68,14 +68,15 @@ export function SlideRail({
                 onFit={(r) => onFit(s.id, r.overflow)}
               />
             </button>
-            <div className="absolute top-6 -right-1 flex flex-col gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            {/* A row under the thumbnail, never beside it: a column would run into the next slide on short 16:9 thumbnails. */}
+            <div className={`mt-1 flex justify-end gap-0.5 transition-opacity group-hover:opacity-100 focus-within:opacity-100 ${current === i ? "opacity-100" : "opacity-0"}`}>
               {[
                 { icon: "up" as const, title: "Move up", on: () => onMove(i, -1), off: i === 0 },
                 { icon: "down" as const, title: "Move down", on: () => onMove(i, 1), off: i === slides.length - 1 },
                 { icon: "copy" as const, title: "Duplicate", on: () => onDuplicate(i), off: slides.length >= format.maxSlides },
                 { icon: "trash" as const, title: "Delete", on: () => onDelete(i), off: slides.length <= 1 },
               ].map((b) => (
-                <button key={b.title} title={b.title} disabled={b.off} onClick={b.on} className="flex h-7 w-7 items-center justify-center border border-line bg-paper text-taupe hover:text-ink disabled:opacity-30">
+                <button key={b.title} title={b.title} aria-label={b.title} disabled={b.off} onClick={b.on} className="flex h-6 w-7 items-center justify-center border border-line bg-paper text-taupe hover:text-ink disabled:opacity-30">
                   <Icon name={b.icon} size={13} />
                 </button>
               ))}

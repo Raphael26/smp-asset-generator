@@ -23,7 +23,6 @@ export function Stage({
   selectedBlock,
   onSelectBlock,
   onChangeSlide,
-  onSnapshot,
   editRequest,
   onEditDone,
   onPickBlockImage,
@@ -39,7 +38,6 @@ export function Stage({
   selectedBlock: string | null;
   onSelectBlock: (id: string | null) => void;
   onChangeSlide: (fn: (s: Slide) => Slide) => void;
-  onSnapshot: () => void;
   editRequest: string | null;
   onEditDone: () => void;
   onPickBlockImage: (id: string) => void;
@@ -101,7 +99,6 @@ export function Stage({
                 selected={selectedBlock}
                 onSelect={onSelectBlock}
                 onChange={onChangeSlide}
-                onSnapshot={onSnapshot}
                 editing={editing}
                 onEditing={setEditing}
                 onPickImage={onPickBlockImage}

@@ -53,9 +53,23 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const setSelectedBlock = useCallback((id: string | null, slideIndex?: number) => setSelectedFor({ slide: slideIndex ?? current, id }), [current]);
   const [editRequest, setEditRequest] = useState<string | null>(null);
   const clip = useRef<Block | null>(null);
+  // Undo history (⌘Z / ⇧⌘Z): every change of the content is a step; changes less than 500 ms apart (typing,
+  // dragging) share one. Undo and redo themselves record nothing. `history` only drives the two buttons.
   const undoStack = useRef<AssetContent[]>([]);
   const redoStack = useRef<AssetContent[]>([]);
-  const lastUndo = useRef(0);
+  const lastChange = useRef(0);
+  const replaying = useRef(false);
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  const recordUndo = useCallback((content: AssetContent) => {
+    const now = Date.now();
+    const burst = now - lastChange.current < 500;
+    lastChange.current = now;
+    if (burst) return;
+    undoStack.current.push(structuredClone(content));
+    if (undoStack.current.length > 80) undoStack.current.shift();
+    redoStack.current = [];
+    setHistory({ undo: undoStack.current.length, redo: 0 });
+  }, []);
 
   // Autosave: every change bumps `version`; a save sends the latest asset and remembers which version it was.
   const latest = useRef<Asset | null>(null);
@@ -111,6 +125,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
       const base = latest.current;
       if (!base) return;
       const next = fn(base);
+      if (!replaying.current && next.content !== base.content) recordUndo(base.content);
       latest.current = next;
       setAsset(next);
       version.current++;
@@ -120,43 +135,37 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
         inflight.current = persist().finally(() => (inflight.current = null));
       }, 700);
     },
-    [persist],
+    [persist, recordUndo],
   );
 
-  // Undo history of the block changes on free slides (⌘Z); rapid changes within 400 ms share one step.
-  const pushUndo = useCallback(() => {
-    const a = latest.current;
-    if (!a) return;
-    const now = Date.now();
-    if (now - lastUndo.current < 400) return;
-    lastUndo.current = now;
-    undoStack.current.push(structuredClone(a.content));
-    if (undoStack.current.length > 60) undoStack.current.shift();
-    redoStack.current = [];
-  }, []);
   const undo = useCallback(() => {
     const prev = undoStack.current.pop();
     const a = latest.current;
     if (!prev || !a) return;
     redoStack.current.push(structuredClone(a.content));
-    lastUndo.current = 0;
+    lastChange.current = 0;
+    replaying.current = true;
     update((x) => ({ ...x, content: prev }));
+    replaying.current = false;
+    setHistory({ undo: undoStack.current.length, redo: redoStack.current.length });
   }, [update]);
   const redo = useCallback(() => {
     const next = redoStack.current.pop();
     const a = latest.current;
     if (!next || !a) return;
     undoStack.current.push(structuredClone(a.content));
-    lastUndo.current = 0;
+    lastChange.current = 0;
+    replaying.current = true;
     update((x) => ({ ...x, content: next }));
+    replaying.current = false;
+    setHistory({ undo: undoStack.current.length, redo: redoStack.current.length });
   }, [update]);
-  // Changes the blocks of a slide, with an undo step first.
+  // Changes the blocks of a slide.
   const editBlocks = useCallback(
-    (slideIndex: number, fn: (blocks: Block[]) => Block[], snapshot = true) => {
-      if (snapshot) pushUndo();
+    (slideIndex: number, fn: (blocks: Block[]) => Block[]) => {
       update((a) => ({ ...a, content: { ...a.content, slides: a.content.slides.map((s, i) => (i === slideIndex ? { ...s, blocks: fn(s.blocks ?? []) } : s)) } }));
     },
-    [pushUndo, update],
+    [update],
   );
   const blockAt = useCallback((id: string) => latest.current?.content.slides[current]?.blocks?.find((b) => b.id === id), [current]);
   const deleteBlock = useCallback(
@@ -219,7 +228,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   // Keys, when not typing: ← → ↑ ↓ between slides, Home / End to the first and last; Page ↑ ↓ turn the slide even
   // from the prompt bar or with a block selected. On a free slide with a block selected: ⌫ deletes it, arrows nudge it
   // (Shift: by 10), ⌘D duplicates, ⌘C / ⌘V copy and paste it (to any free slide), ⌘[ ⌘] reorder it, Esc deselects.
-  // ⌘Z / ⇧⌘Z undo and redo block changes.
+  // ⌘Z / ⇧⌘Z undo and redo any change; ⌘S saves now.
   useEffect(() => {
     const go = (e: KeyboardEvent, i: number) => {
       e.preventDefault();
@@ -231,6 +240,11 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
       const tag = t.tagName?.toLowerCase();
       const meta = e.metaKey || e.ctrlKey;
       const plain = !meta && !e.altKey;
+      if (meta && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        flush();
+        return;
+      }
       // A textarea or a list keeps the Page keys for itself; a single-line input has no use for them.
       const typing = tag === "textarea" || tag === "select" || t.isContentEditable;
       if (plain && (e.key === "PageUp" || e.key === "PageDown") && !typing) return go(e, current + (e.key === "PageUp" ? -1 : 1));
@@ -289,7 +303,7 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [current, total, dialog, setCurrent, selectedBlock, setSelectedBlock, undo, redo, pasteBlock, deleteBlock, duplicateBlock, orderBlock, nudgeBlock]);
+  }, [current, total, dialog, setCurrent, selectedBlock, setSelectedBlock, undo, redo, flush, pasteBlock, deleteBlock, duplicateBlock, orderBlock, nudgeBlock]);
 
   const aiIds = useMemo(() => new Set(media.filter((m) => m.isAi).map((m) => m.id)), [media]);
   const issues = useMemo<Issue[]>(() => {
@@ -393,12 +407,11 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
     setSlides((s) => [...s.slice(0, i + 1), { ...structuredClone(s[i]), id: makeId() }, ...s.slice(i + 1)]);
     setCurrentRaw(i + 1);
   };
+  // No confirmation: the deletion is one ⌘Z away (and a browser dialog is blocked in some embedded browsers).
   const deleteSlide = (i: number) => {
-    const s = asset.content.slides[i];
-    const hasText = Object.values(s.fields).some((v) => v.trim()) || s.image;
-    if (hasText && !confirm(`Delete ${unitName(format)} ${i + 1}? You can get it back from the history after the next save.`)) return;
     setSlides((all) => all.filter((_, j) => j !== i));
     setCurrentRaw(Math.max(0, Math.min(current, total - 2)));
+    toast(`${unitName(format) === "page" ? "Page" : "Slide"} ${i + 1} deleted. Undo brings it back.`);
   };
 
   // Free slides: unlock a template slide into blocks (it keeps its look), and add a block. Adding to a template
@@ -406,7 +419,6 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
   const unlockCurrent = (): Slide | null => {
     const el = document.querySelector<HTMLElement>("#stage-slide .smp-slide");
     if (!el || !slide || slide.layout === "free") return slide ?? null;
-    pushUndo();
     const unlocked = unlockSlide(el, slide);
     setSlides((all) => all.map((s) => (s.id === slide.id ? unlocked : s)));
     setSelectedBlock(null);
@@ -523,6 +535,16 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
         </div>
         <StatusBadge status={asset.status} />
         <div className="ml-auto flex items-center gap-1.5">
+          <button className="btn btn-ghost btn-sm" disabled={!history.undo} onClick={undo} title="Undo (⌘Z)" aria-label="Undo">
+            <Icon name="undo" size={15} />
+          </button>
+          <button className="btn btn-ghost btn-sm" disabled={!history.redo} onClick={redo} title="Redo (⇧⌘Z)" aria-label="Redo">
+            <Icon name="redo" size={15} />
+          </button>
+          <button className="btn btn-ghost btn-sm" disabled={save === "saved" || save === "saving"} onClick={() => flush()} title="Save now (⌘S). Changes also save by themselves.">
+            <Icon name="save" size={15} /> {save === "saved" ? "Saved" : save === "saving" ? "Saving…" : save === "error" ? "Retry save" : "Save"}
+          </button>
+          <span className="mx-1 h-6 w-px bg-line" />
           <button
             className={`btn btn-sm ${errors ? "border-blush bg-blush text-flag" : "btn-ghost"}`}
             onClick={() => setDialog("check")}
@@ -585,7 +607,6 @@ export function Editor({ id, created = false }: { id: string; created?: boolean 
             selectedBlock={selectedBlock}
             onSelectBlock={setSelectedBlock}
             onChangeSlide={(fn) => setSlides((all) => all.map((s, i) => (i === current ? fn(s) : s)))}
-            onSnapshot={pushUndo}
             editRequest={editRequest}
             onEditDone={() => setEditRequest(null)}
             onPickBlockImage={openBlockPicker}

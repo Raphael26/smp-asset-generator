@@ -140,7 +140,12 @@ export function PostInspector({
           {caption.trim() && (
             <button
               className="btn btn-ghost btn-sm"
-              onClick={() => navigator.clipboard.writeText(caption).then(() => toast("Caption copied.", "success"))}
+              onClick={() =>
+                navigator.clipboard
+                  .writeText(caption)
+                  .then(() => toast("Caption copied.", "success"))
+                  .catch(() => toast("Copying is blocked here: select the caption and copy it.", "error"))
+              }
             >
               <Icon name="copy" size={14} /> Copy
             </button>
