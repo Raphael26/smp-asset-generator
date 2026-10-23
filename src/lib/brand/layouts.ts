@@ -121,7 +121,20 @@ export const LAYOUTS: LayoutDef[] = [
   {
     id: "photo",
     name: "Photo + title",
-    description: "A photo above (or beside) a title and a short text.",
+    description: "A photo above (or beside) a title and a short text; the photo fills its frame and is cropped to it.",
+    image: "required",
+    defaultGround: "cream",
+    kind: "social",
+    fields: [
+      eyebrow("01 — Décoration"),
+      { key: "title", label: "Title", kind: "title", max: 60, placeholder: "Un intérieur qui *vous ressemble.*", help: TITLE_HELP },
+      { key: "text", label: "Text", kind: "text", max: 160, optional: true, placeholder: "Des intérieurs chaleureux, harmonieux et pensés pour votre façon de vivre.", help: TEXT_HELP },
+    ],
+  },
+  {
+    id: "photo-full",
+    name: "Full photo + text",
+    description: "The whole photo on top, never cropped or zoomed, then a title and a short text on the ground below. The layout follows the photo’s proportions.",
     image: "required",
     defaultGround: "cream",
     kind: "social",
@@ -364,6 +377,12 @@ export function imageFrame(layout: LayoutId, format: Format): { width: number; h
     if (layout === "doc-cover") return { width: (width - 128) * 2, height: 400 * 2 };
     return { width: (width - 128) * 2, height: 460 * 2 };
   }
+  // The full-photo template shows the photo whole: a generated photo is made at the largest shape that fills
+  // its zone edge to edge (see fullPhotoZone), so the layout is the same as the cropped template's.
+  if (layout === "photo-full") {
+    const zone = fullPhotoZone(format, FULL_PHOTO_DEFAULT_RATIO);
+    return { width: zone.photoW, height: zone.photoH };
+  }
   switch (shape) {
     case "landscape":
       return { width: Math.round(width * 0.46), height };
@@ -383,6 +402,65 @@ export function galleryFrame() {
 
 export const MAX_GALLERY = 6;
 
+// ——— Full photo + text: the photo zone follows the photo ———
+
+/** Share of the slide the photo zone may take (height for portrait shapes, width for landscape ones), and the
+ *  slide's margins (slides.css --pad-t / --pad-x), per social shape. */
+const FULL_PHOTO: Record<string, { cap: number; padT: number; padX: number }> = {
+  portrait: { cap: 0.6, padT: 92, padX: 96 },
+  square: { cap: 0.56, padT: 80, padX: 88 },
+  story: { cap: 0.55, padT: 250, padX: 96 },
+  landscape: { cap: 0.56, padT: 52, padX: 68 },
+};
+
+/** Proportions assumed before the photo has loaded, and used to size a generated photo: it fills the zone exactly. */
+export const FULL_PHOTO_DEFAULT_RATIO = 1080 / 810;
+
+export type FullPhotoZone = {
+  /** The photo sits above the text (portrait, square, story) or beside it (landscape). */
+  side: "top" | "left";
+  /** Size of the zone the photo takes, text starting right after it. */
+  zoneW: number;
+  zoneH: number;
+  /** Size and position of the photo inside the slide. */
+  photoW: number;
+  photoH: number;
+  x: number;
+  y: number;
+  /** The photo is narrower than the slide, set in from the edges like a mounted print. */
+  inset: boolean;
+};
+
+/**
+ * Where the whole photo goes on a « Full photo + text » slide, from its width ÷ height ratio. A photo wide enough
+ * fills the slide edge to edge and the zone is just as tall as the photo; a taller one is shown smaller, inside
+ * the slide's margins, so the text below always keeps its room. Nothing is ever cropped.
+ */
+export function fullPhotoZone(format: Format, ratio: number): FullPhotoZone {
+  const { width: W, height: H } = format;
+  const r = Number.isFinite(ratio) && ratio > 0 ? ratio : FULL_PHOTO_DEFAULT_RATIO;
+  const { cap, padT, padX } = FULL_PHOTO[format.shape] ?? FULL_PHOTO.portrait;
+  if (format.shape === "landscape") {
+    // Beside the text: full height when the photo is narrow enough, otherwise set in from the top, bottom and left.
+    const maxW = Math.round(W * cap);
+    if (H * r <= maxW) {
+      const photoW = Math.round(H * r);
+      return { side: "left", zoneW: photoW, zoneH: H, photoW, photoH: H, x: 0, y: 0, inset: false };
+    }
+    const photoH = Math.min(H - 2 * padT, Math.round((maxW - padX) / r));
+    const photoW = Math.round(photoH * r);
+    return { side: "left", zoneW: padX + photoW, zoneH: H, photoW, photoH, x: padX, y: Math.round((H - photoH) / 2), inset: true };
+  }
+  const maxH = Math.round(H * cap);
+  if (W / r <= maxH) {
+    const photoH = Math.round(W / r);
+    return { side: "top", zoneW: W, zoneH: photoH, photoW: W, photoH, x: 0, y: 0, inset: false };
+  }
+  const photoH = Math.min(maxH - padT, Math.round((W - 2 * padX) / r));
+  const photoW = Math.round(photoH * r);
+  return { side: "top", zoneW: W, zoneH: padT + photoH, photoW, photoH, x: Math.round((W - photoW) / 2), y: padT, inset: true };
+}
+
 /** Templates available for a format: social ones for social formats, pages for documents, pages and deck slides for presentations. */
 export function layoutsFor(format: Format): LayoutDef[] {
   const kinds: LayoutDef["kind"][] = isDocument(format) ? ["document", "both"] : isDeck(format) ? ["document", "deck", "both"] : ["social", "both"];
@@ -392,7 +470,7 @@ export function layoutsFor(format: Format): LayoutDef[] {
 /** The closest template of a format, when a slide meets a format it does not belong to. */
 export function equivalentLayout(layout: LayoutId, format: Format): LayoutId {
   if (layoutsFor(format).some((l) => l.id === layout)) return layout;
-  const toDoc: Partial<Record<LayoutId, LayoutId>> = { cover: "doc-cover", figure: "doc-figures", text: "doc-page", list: "doc-checklist", photo: "doc-photo", cta: "doc-closing", "deck-section": "doc-page", "deck-agenda": "doc-checklist", free: "doc-page" };
+  const toDoc: Partial<Record<LayoutId, LayoutId>> = { cover: "doc-cover", figure: "doc-figures", text: "doc-page", list: "doc-checklist", photo: "doc-photo", "photo-full": "doc-photo", cta: "doc-closing", "deck-section": "doc-page", "deck-agenda": "doc-checklist", free: "doc-page" };
   const toSocial: Partial<Record<LayoutId, LayoutId>> = { "doc-cover": "cover", "doc-figures": "figure", "doc-page": "text", "doc-checklist": "list", "doc-photo": "photo", "doc-closing": "cta", "doc-table": "list", "doc-offer": "list", "doc-moodboard": "photo", "deck-section": "cover", "deck-agenda": "list", free: "text" };
   if (isDocument(format) || isDeck(format)) return toDoc[layout] ?? "doc-page";
   return toSocial[layout] ?? "text";
@@ -432,7 +510,8 @@ export const CAROUSEL_STARTERS: Starter[] = [
 export const SINGLE_STARTERS: Starter[] = [
   { id: "title", name: "Title", description: "A large title and a lead.", slides: [{ layout: "cover" }] },
   { id: "figure", name: "Key figure", description: "One statistic and its source.", slides: [{ layout: "figure" }] },
-  { id: "photo", name: "Photo + title", description: "A photo with a title.", slides: [{ layout: "photo" }] },
+  { id: "photo", name: "Photo + title", description: "A photo filling the top, cropped to it, with a title.", slides: [{ layout: "photo" }] },
+  { id: "photo-full", name: "Full photo + text", description: "The whole photo, never cropped, with a title below.", slides: [{ layout: "photo-full" }] },
   { id: "quote", name: "Quote", description: "A sentence in italic.", slides: [{ layout: "quote" }] },
   { id: "list", name: "List", description: "A title and a few items.", slides: [{ layout: "list" }] },
   { id: "cta", name: "Invitation", description: "« Parlons de votre maison. » and the booking button.", slides: [{ layout: "cta" }] },

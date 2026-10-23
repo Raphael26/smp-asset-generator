@@ -16,6 +16,8 @@ export function useFit(
   onFit?: (result: { fit: number; overflow: boolean }) => void,
   /** Extra overflow check, run once the type is fitted (free slides: a text block fuller than its box). */
   extra?: (el: HTMLDivElement) => boolean,
+  /** The layout still waits for something (a photo to measure): fit anyway, but do not mark the slide ready. */
+  pending = false,
 ) {
   useLayoutEffect(() => {
     const el = ref.current;
@@ -34,7 +36,7 @@ export function useFit(
       const overflow = overflows() || Boolean(extra?.(el));
       el.dataset.fit = String(fit);
       el.dataset.overflow = String(overflow);
-      el.dataset.ready = "true";
+      el.dataset.ready = String(!pending);
       onFit?.({ fit, overflow });
     };
     el.dataset.ready = "false";
@@ -44,5 +46,5 @@ export function useFit(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, pending]);
 }

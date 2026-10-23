@@ -128,8 +128,8 @@
   font-size: calc(var(--contrast) * 1px); color: var(--quote); }
 .smp-role { margin-top: .6em !important; font-size: calc(var(--eyebrow) * 1px); letter-spacing: .2em; text-transform: uppercase; color: var(--taupe); }
 
-/* Photo + title */
-.smp-layout-photo { flex-direction: column; }
+/* Photo + title (the photo fills its frame, cropped) and Full photo + text (the photo whole, in a zone sized to it) */
+.smp-layout-photo, .smp-layout-photo-full { flex-direction: column; }
 .smp-photo { position: relative; flex: none; overflow: hidden; background: var(--stone); }
 .smp-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .smp-photo .smp-photo-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -137,15 +137,27 @@
 .smp-layout-photo .smp-photo { height: 60%; }
 .smp-slide[data-shape="square"].smp-layout-photo .smp-photo { height: 54%; }
 .smp-slide[data-shape="story"].smp-layout-photo .smp-photo { height: 58%; }
-.smp-layout-photo .smp-inner { padding-top: calc(var(--pad-x) * .6px); padding-bottom: calc(var(--pad-b) * .8px); }
-.smp-slide[data-shape="story"].smp-layout-photo .smp-inner { padding-top: 64px; }
-.smp-layout-photo .smp-title { font-size: calc(var(--photo-title) * var(--fit) * 1px); margin-top: calc(var(--gap) * .45px); }
-.smp-layout-photo .smp-body-text { font-size: calc(var(--photo-text) * var(--fit) * 1px); margin-top: calc(var(--gap) * .35px); }
-.smp-slide[data-shape="landscape"].smp-layout-photo { flex-direction: row; }
+/* The full photo: the zone is the ground, the photo's box (sized by fullPhotoZone) sits inside it, nothing is cropped. */
+.smp-photo.is-full { background: none; }
+.smp-photo.is-full .smp-photo-box { position: absolute; overflow: hidden; background: var(--stone); }
+.smp-photo.is-full img { object-fit: contain; transform: none; }
+.smp-layout-photo .smp-inner, .smp-layout-photo-full .smp-inner { padding-top: calc(var(--pad-x) * .6px); padding-bottom: calc(var(--pad-b) * .8px); }
+.smp-slide[data-shape="story"].smp-layout-photo .smp-inner, .smp-slide[data-shape="story"].smp-layout-photo-full .smp-inner { padding-top: 64px; }
+.smp-layout-photo .smp-title, .smp-layout-photo-full .smp-title { font-size: calc(var(--photo-title) * var(--fit) * 1px); margin-top: calc(var(--gap) * .45px); }
+.smp-layout-photo .smp-body-text, .smp-layout-photo-full .smp-body-text { font-size: calc(var(--photo-text) * var(--fit) * 1px); margin-top: calc(var(--gap) * .35px); }
+.smp-slide[data-shape="landscape"].smp-layout-photo, .smp-slide[data-shape="landscape"].smp-layout-photo-full { flex-direction: row; }
 .smp-slide[data-shape="landscape"].smp-layout-photo .smp-photo { height: 100%; width: 46%; }
-.smp-slide[data-shape="landscape"].smp-layout-photo .smp-inner { padding: calc(var(--pad-t) * 1px) calc(var(--pad-x) * 1px) calc(var(--pad-b) * 1px); }
-.smp-slide[data-shape="landscape"].smp-layout-photo .smp-body { justify-content: center; }
-.smp-layout-photo .smp-top { min-height: 0; }
+.smp-slide[data-shape="landscape"].smp-layout-photo .smp-inner, .smp-slide[data-shape="landscape"].smp-layout-photo-full .smp-inner { padding: calc(var(--pad-t) * 1px) calc(var(--pad-x) * 1px) calc(var(--pad-b) * 1px); }
+.smp-slide[data-shape="landscape"].smp-layout-photo .smp-body, .smp-slide[data-shape="landscape"].smp-layout-photo-full .smp-body { justify-content: center; }
+.smp-layout-photo .smp-top, .smp-layout-photo-full .smp-top { min-height: 0; }
+/* Under a short photo, the eyebrow row, title and text sit together in the middle of the room left, the footer
+   staying at the bottom; under a tall one the room is small and nothing moves. */
+.smp-layout-photo-full .smp-top { margin-top: auto; }
+.smp-layout-photo-full .smp-body { flex: 0 1 auto; }
+.smp-layout-photo-full .smp-bottom { margin-top: auto; padding-top: calc(var(--gap) * 1px); }
+.smp-slide[data-shape="landscape"].smp-layout-photo-full .smp-top { margin-top: 0; }
+.smp-slide[data-shape="landscape"].smp-layout-photo-full .smp-body { flex: 1; }
+.smp-slide[data-shape="landscape"].smp-layout-photo-full .smp-bottom { margin-top: calc(var(--gap) * 1px); padding-top: 0; }
 
 /* Closing */
 .smp-layout-cta .smp-body { justify-content: center; align-items: center; text-align: center; }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Media } from "@/lib/db/schema";
 import type { Block, LayoutId, Slide, SlideChrome } from "@/lib/content";
-import { MAX_GALLERY, getLayout, layoutsFor, newSlide } from "@/lib/brand/layouts";
+import { MAX_GALLERY, fullPhotoZone, getLayout, layoutsFor, newSlide } from "@/lib/brand/layouts";
 import { isDeck, type Format } from "@/lib/brand/formats";
 import { GROUNDS } from "@/lib/brand/tokens";
 import { FieldInput } from "./FieldInput";
@@ -85,6 +85,12 @@ export function SlideInspector({
   };
 
   const setImage = (patch: Partial<NonNullable<Slide["image"]>>) => slide.image && onChange({ ...slide, image: { ...slide.image, ...patch } });
+
+  // Social photo slides choose how the photo is framed: cropped to fill its frame (photo) or shown whole (photo-full).
+  const framing = slide.layout === "photo" || slide.layout === "photo-full" ? slide.layout : null;
+  const canFrame = framing && ["photo", "photo-full"].every((id) => layoutsFor(format).some((l) => l.id === id));
+  const fullZone = slide.layout === "photo-full" && image ? fullPhotoZone(format, image.width / image.height) : null;
+  const shapeOf = (m: Media) => (m.width > m.height * 1.15 ? "landscape" : m.height > m.width * 1.15 ? "portrait" : "square");
 
   return (
     <div className="flex flex-col gap-7">
@@ -243,26 +249,51 @@ export function SlideInspector({
                   </div>
                 </div>
               </div>
-              {[
-                { key: "focusX" as const, label: "Left ↔ right", min: 0, max: 100, step: 1 },
-                { key: "focusY" as const, label: "Top ↕ bottom", min: 0, max: 100, step: 1 },
-                { key: "zoom" as const, label: "Zoom", min: 1, max: 2, step: 0.01 },
-              ].map((c) => (
-                <label key={c.key} className="grid grid-cols-[96px_1fr_36px] items-center gap-2 text-[12px] text-ink-soft">
-                  {c.label}
-                  <input
-                    type="range"
-                    min={c.min}
-                    max={c.max}
-                    step={c.step}
-                    value={slide.image![c.key]}
-                    onChange={(e) => setImage({ [c.key]: Number(e.target.value) })}
-                    className="accent-ink"
-                  />
-                  <span className="text-right tabular-nums text-muted">{c.key === "zoom" ? `${Math.round(slide.image![c.key] * 100)}%` : slide.image![c.key]}</span>
-                </label>
-              ))}
-              <p className="text-[11.5px] text-muted">Faces sit well around 50 % across and 15–30 % from the top.</p>
+              {canFrame && (
+                <div>
+                  <p className="mb-1.5 text-[12px] text-ink-soft">Framing</p>
+                  <div className="flex gap-1.5">
+                    <button className="chip" aria-pressed={framing === "photo"} title="The photo fills the top of the slide and is cropped to it; move the focal point below." onClick={() => changeLayout("photo")}>
+                      Fill and crop
+                    </button>
+                    <button className="chip" aria-pressed={framing === "photo-full"} title="The whole photo, never cropped or zoomed; the text sits under it." onClick={() => changeLayout("photo-full")}>
+                      Whole photo
+                    </button>
+                  </div>
+                </div>
+              )}
+              {slide.layout === "photo-full" ? (
+                <p className="text-[11.5px] leading-snug text-muted">
+                  {image && fullZone
+                    ? fullZone.inset
+                      ? `A ${shapeOf(image)} photo, taller than its zone: shown smaller inside the slide’s margins, the ground around it, so the text keeps its room.`
+                      : `A ${shapeOf(image)} photo: it fills the ${fullZone.side === "left" ? "height" : "width"} edge to edge and the text starts right ${fullZone.side === "left" ? "beside" : "under"} it.`
+                    : "The whole photo is shown, never cropped: the layout follows its proportions."}
+                </p>
+              ) : (
+                <>
+                  {[
+                    { key: "focusX" as const, label: "Left ↔ right", min: 0, max: 100, step: 1 },
+                    { key: "focusY" as const, label: "Top ↕ bottom", min: 0, max: 100, step: 1 },
+                    { key: "zoom" as const, label: "Zoom", min: 1, max: 2, step: 0.01 },
+                  ].map((c) => (
+                    <label key={c.key} className="grid grid-cols-[96px_1fr_36px] items-center gap-2 text-[12px] text-ink-soft">
+                      {c.label}
+                      <input
+                        type="range"
+                        min={c.min}
+                        max={c.max}
+                        step={c.step}
+                        value={slide.image![c.key]}
+                        onChange={(e) => setImage({ [c.key]: Number(e.target.value) })}
+                        className="accent-ink"
+                      />
+                      <span className="text-right tabular-nums text-muted">{c.key === "zoom" ? `${Math.round(slide.image![c.key] * 100)}%` : slide.image![c.key]}</span>
+                    </label>
+                  ))}
+                  <p className="text-[11.5px] text-muted">Faces sit well around 50 % across and 15–30 % from the top.{canFrame ? " To keep every bit of the photo, choose « Whole photo »." : ""}</p>
+                </>
+              )}
             </div>
           ) : (
             <button onClick={onPickImage} className="flex h-[96px] w-full flex-col items-center justify-center gap-2 border border-dashed border-rule text-[13px] text-ink-soft hover:bg-cream">

@@ -1,9 +1,9 @@
 "use client";
 
-import { Fragment, useRef, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AssetOptions, Slide } from "@/lib/content";
 import type { Format } from "@/lib/brand/formats";
-import { getLayout } from "@/lib/brand/layouts";
+import { FULL_PHOTO_DEFAULT_RATIO, fullPhotoZone, getLayout } from "@/lib/brand/layouts";
 import { universe as getUniverse } from "@/lib/brand/tokens";
 import { frenchTypo, parseRich } from "@/lib/brand/typography";
 import { useFit } from "./useFit";
@@ -69,8 +69,24 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
     );
   };
 
+  // « Full photo + text »: the layout follows the photo's proportions, measured once it has loaded (the image may
+  // be complete before React attaches onLoad, so the mount checks it too). A photo that fails to load gets the
+  // default proportions rather than holding the slide.
+  const fullPhoto = slide.layout === "photo-full";
+  const mediaId = slide.image?.mediaId ?? null;
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [measured, setMeasured] = useState<{ id: string; ratio: number } | null>(null);
+  const measure = useCallback(() => {
+    const el = imgRef.current;
+    if (!el?.complete || !el.dataset.media) return;
+    setMeasured({ id: el.dataset.media, ratio: el.naturalWidth && el.naturalHeight ? el.naturalWidth / el.naturalHeight : FULL_PHOTO_DEFAULT_RATIO });
+  }, []);
+  useEffect(measure, [measure, mediaId]);
+  const ratio = fullPhoto && mediaId && measured?.id === mediaId ? measured.ratio : null;
+  const zone = fullPhoto ? fullPhotoZone(format, ratio ?? FULL_PHOTO_DEFAULT_RATIO) : null;
+
   // Shrink the type until the body fits, once the fonts are ready. Runs on every change.
-  useFit(ref, bodyRef, JSON.stringify([slide, format.id, options, placeholders, universeId]), onFit);
+  useFit(ref, bodyRef, JSON.stringify([slide, format.id, options, placeholders, universeId, ratio]), onFit, undefined, fullPhoto && Boolean(mediaId) && ratio === null);
 
   const isLast = index === total - 1;
   const swipe = format.multi && options.swipeHint && !isLast && total > 1;
@@ -122,7 +138,22 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
   );
 
   const image = slide.image;
-  const photo = (
+  const photo = zone ? (
+    // The whole photo, never cropped: its box is sized from its proportions, the ground shows around it when it is
+    // taller than its zone.
+    <div className={`smp-photo is-full${zone.inset ? " is-inset" : ""}`} style={{ width: zone.zoneW, height: zone.zoneH }}>
+      <div className="smp-photo-box" style={{ left: zone.x, top: zone.y, width: zone.photoW, height: zone.photoH }}>
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img ref={imgRef} data-media={image.mediaId} src={mediaUrl(image.mediaId)} alt="" onLoad={measure} onError={measure} />
+        ) : slide.photoJob && placeholders ? (
+          <div className="smp-photo-empty anim-pulse">Generating the photo…</div>
+        ) : (
+          <div className="smp-photo-empty">{placeholders ? "Choose a photo" : ""}</div>
+        )}
+      </div>
+    </div>
+  ) : (
     <div className="smp-photo">
       {image ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -229,6 +260,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
       break;
     }
     case "photo":
+    case "photo-full":
       body = (
         <>
           {rich("title", "smp-title", "span", "h1")}
@@ -281,7 +313,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
       data-ground={slide.ground}
       style={{ width: format.width, height: format.height }}
     >
-      {slide.layout === "photo" && photo}
+      {(slide.layout === "photo" || slide.layout === "photo-full") && photo}
       <div className="smp-inner">
         {slide.layout === "cta" ? ctaTop : top}
         <div className="smp-body" ref={bodyRef}>

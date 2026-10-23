@@ -9,6 +9,7 @@ export type LayoutId =
   | "list"
   | "quote"
   | "photo"
+  | "photo-full"
   | "cta"
   | "doc-cover"
   | "doc-page"

@@ -95,7 +95,9 @@ function buildGuide(): string {
   l.push("- A slide with the template « free » was laid out by hand by Rebeca (blocks she placed herself). When editing, return it with layout « free », its basedOn number and no fields: the studio keeps it exactly as it is. Never create a free slide yourself.");
   l.push("");
   l.push("## Photos");
-  l.push("Templates with a photo: photo, doc-photo (required) and doc-cover (optional). For the others set photo.source to « none ». The moodboard uses its gallery (a list of photos with the same sources); every other template has an empty gallery.");
+  const withPhoto = (kind: "required" | "optional") => LAYOUTS.filter((t) => t.image === kind).map((t) => t.id).join(", ");
+  l.push(`Templates with a photo: ${withPhoto("required")} (required) and ${withPhoto("optional")} (optional). For the others set photo.source to « none ». The moodboard uses its gallery (a list of photos with the same sources); every other template has an empty gallery.`);
+  l.push("- Two social photo templates. « photo » fills the top of the slide with the photo and crops it to that frame (Rebeca can move the focal point afterwards). « photo-full » shows the photo whole, never cropped or zoomed, and sets the title and text under it on the ground; the layout follows the photo's proportions (a wide photo fills the width, a tall one is shown smaller within the margins). Use photo-full whenever she asks to see the whole photo or not to crop it (« la photo entière », « en entier », « sans couper / recadrer », « ne pas rogner »), and for a real photo of her library whose framing matters: a portrait, a before/after or a detail she composed herself. Otherwise photo. A generated photo is made at the exact shape of its frame, so with photo-full it looks like photo: prefer photo-full for her own photos.");
   l.push("- « library »: one of her images listed in the request, by its id. Real photos of Rebeca are the brand's strongest images: use them for personal topics, her story, her work.");
   l.push(`- « generate »: write an English prompt for Flux 2 (60 to 120 words: the scene, the light, the materials, the camera; end with « no people, no text, no logos »). At most ${MAX_GENERATED_PHOTOS} per social visual, ${MAX_GENERATED_PHOTOS_DOCUMENT} per document or presentation.`);
   l.push("- « keep »: when editing, keep the slide's current photo.");
@@ -160,7 +162,7 @@ function libraryList(media: Media[]): string {
 function photoRule(images: CreateOptions["images"]): string {
   switch (images) {
     case "none":
-      return "Photos: none. Do not use templates that need a photo (photo, doc-photo, doc-moodboard); covers without a photo.";
+      return `Photos: none. Do not use templates that need a photo (${LAYOUTS.filter((t) => t.image === "required" || t.image === "gallery").map((t) => t.id).join(", ")}); covers without a photo.`;
     case "library":
       return "Photos: only from her library (photo.source « library »). Never « generate ».";
     case "ai":
@@ -232,7 +234,7 @@ function normalize(
     }
     // Social visuals use social templates, documents use pages; « No photos » means no template that needs one.
     let layout = equivalentLayout(s.layout === "free" ? "doc-page" : (s.layout as LayoutId), format);
-    if (ctx.images === "none" && (layout === "photo" || layout === "doc-photo")) layout = paged ? "doc-page" : "text";
+    if (ctx.images === "none" && getLayout(layout).image === "required") layout = paged ? "doc-page" : "text";
     const slide = newSlide(layout, s.ground as GroundId);
     if (base && !usedIds.has(base.id)) slide.id = base.id;
     usedIds.add(slide.id);
