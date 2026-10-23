@@ -1,11 +1,11 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import type { AssetOptions, Slide } from "@/lib/content";
+import { languageOf, type AssetOptions, type Slide } from "@/lib/content";
 import type { Format } from "@/lib/brand/formats";
 import { FULL_PHOTO_DEFAULT_RATIO, fullPhotoZone, getLayout } from "@/lib/brand/layouts";
-import { universe as getUniverse } from "@/lib/brand/tokens";
-import { frenchTypo, parseRich } from "@/lib/brand/typography";
+import { BOOKING_BUTTON, DRAWN, universe as getUniverse, universeLabel } from "@/lib/brand/tokens";
+import { parseRich, typo } from "@/lib/brand/typography";
 import { useFit } from "./useFit";
 import { Rich, VisioIcon } from "./parts";
 import { DocPage } from "./DocPage";
@@ -41,6 +41,10 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
   const bodyRef = useRef<HTMLDivElement>(null);
   const def = getLayout(slide.layout);
   const uni = getUniverse(universeId);
+  // The visual's language: its typography, and the labels the slide draws itself.
+  const lang = languageOf(options);
+  const t = (s: string) => typo(s, lang);
+  const drawn = DRAWN[lang];
 
   // Field value, or its placeholder in the editor; `ph` tells the caller it is a placeholder.
   const field = (key: string): { value: string; ph: boolean } => {
@@ -55,7 +59,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
     if (!value) return null;
     return (
       <Wrapper className={`${className}${ph ? " is-ph" : ""}`} data-field={key}>
-        <Rich paragraphs={parseRich(value)} as={as} />
+        <Rich paragraphs={parseRich(value, lang)} as={as} />
       </Wrapper>
     );
   };
@@ -64,7 +68,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
     if (!value) return null;
     return (
       <p className={`${className}${ph ? " is-ph" : ""}`} data-field={key}>
-        {frenchTypo(value.replace(/\*/g, ""))}
+        {t(value.replace(/\*/g, ""))}
       </p>
     );
   };
@@ -106,7 +110,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
     <div className="smp-top">
       {eyebrow.value ? (
         <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`} data-field="eyebrow">
-          {frenchTypo(eyebrow.value)}
+          {t(eyebrow.value)}
         </span>
       ) : (
         <span />
@@ -117,7 +121,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
 
   // Footer: the source of a figure (or the page number) on the left, « Glissez → » on the right.
   const source = field("source");
-  const sourceText = slide.layout === "figure" && source.value ? frenchTypo(`Source : ${source.value.replace(/^source\s*:\s*/i, "")}`) : null;
+  const sourceText = slide.layout === "figure" && source.value ? t(`${drawn.source}${source.value.replace(/^source\s*:\s*/i, "")}`) : null;
   const bottom = (
     <div className="smp-bottom">
       {sourceText ? (
@@ -129,7 +133,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
       )}
       {swipe ? (
         <span className="smp-swipe">
-          Glissez <span aria-hidden>→</span>
+          {drawn.swipe} <span aria-hidden>→</span>
         </span>
       ) : (
         sourceText && page && <span className="smp-swipe">{page}</span>
@@ -181,7 +185,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
         <>
           {index === 0 && options.universeTag && uni && (
             <span className="smp-tag" style={{ background: uni.tint, color: uni.tintInk }}>
-              {uni.number} — {uni.short}
+              {uni.number} — {universeLabel(uni, lang)}
             </span>
           )}
           {rich("title", "smp-title", "span", "h1")}
@@ -224,7 +228,7 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
                 .map((item, i) => (
                   <li key={i}>
                     <span>
-                      <Rich paragraphs={parseRich(item)} as="span" />
+                      <Rich paragraphs={parseRich(item, lang)} as="span" />
                     </span>
                   </li>
                 ))}
@@ -242,17 +246,17 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
         <>
           {q.value && (
             <div className={`smp-quote${q.ph ? " is-ph" : ""}`} data-field="quote">
-              <Rich paragraphs={parseRich(`«${q.value.replace(/^[«"\s]+|[»"\s]+$/g, "")}»`)} />
+              <Rich paragraphs={parseRich(`«${q.value.replace(/^[«"“\s]+|[»"”\s]+$/g, "")}»`, lang)} />
             </div>
           )}
           {author.value && (
             <p className={`smp-signature${author.ph ? " is-ph" : ""}`} data-field="author">
-              {frenchTypo(author.value)}
+              {t(author.value)}
             </p>
           )}
           {role.value && (
             <p className="smp-role" data-field="role">
-              {frenchTypo(role.value)}
+              {t(role.value)}
             </p>
           )}
         </>
@@ -275,16 +279,16 @@ function SocialSlide({ format, slide, index, total, universeId, options, mediaUr
         <>
           {eyebrow.value && (
             <span className={`smp-eyebrow${eyebrow.ph ? " is-ph" : ""}`} data-field="eyebrow">
-              {frenchTypo(eyebrow.value)}
+              {t(eyebrow.value)}
             </span>
           )}
           {rich("title", "smp-title", "span", "h1")}
           {rich("text", "smp-lead")}
           {button.value && (
             <span className={`smp-button${button.ph ? " is-ph" : ""}`} data-field="button">
-              {/r[ée]server un appel/i.test(button.value) ? <VisioIcon /> : null}
-              {frenchTypo(button.value)}
-              {/r[ée]server un appel/i.test(button.value) ? null : <span aria-hidden>→</span>}
+              {BOOKING_BUTTON.test(button.value) ? <VisioIcon /> : null}
+              {t(button.value)}
+              {BOOKING_BUTTON.test(button.value) ? null : <span aria-hidden>→</span>}
             </span>
           )}
           {url.value && (

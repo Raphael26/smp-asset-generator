@@ -1,18 +1,20 @@
 "use client";
 
 import { createContext, Fragment, useContext, useRef, type CSSProperties, type ReactNode } from "react";
-import type { Block, BlockStyle, BoxFill, ImageRef, SlideChrome } from "@/lib/content";
+import { languageOf, type Block, type BlockStyle, type BoxFill, type ImageRef, type Language, type SlideChrome } from "@/lib/content";
 import { isLandscape } from "@/lib/brand/formats";
 import { getLayout, MAX_GALLERY } from "@/lib/brand/layouts";
 import { fillHex, textSize } from "@/lib/brand/blocks";
-import { universe as getUniverse } from "@/lib/brand/tokens";
-import { frenchTypo, parseBlocks, parseRich, plainText, splitLinks, type Line } from "@/lib/brand/typography";
+import { BOOKING_BUTTON, DRAWN, universe as getUniverse, universeLabel } from "@/lib/brand/tokens";
+import { parseBlocks, parseRich, plainText, splitLinks, typo, type Line } from "@/lib/brand/typography";
 import { Rich, VisioIcon } from "./parts";
 import { useFit } from "./useFit";
 import type { SlideViewProps } from "./SlideView";
 
 /** Whether links are real anchors (the PDF export) or plain spans (previews, which sit inside a link or a button). */
 const LinksContext = createContext(true);
+/** The visual's language, for the typography of the nested pieces (rich blocks, tables, free blocks). */
+const LangContext = createContext<Language>("fr");
 
 function MaybeLink({ href, className, attrs, children }: { href: string; className?: string; attrs?: Record<string, string>; children: ReactNode }) {
   const links = useContext(LinksContext);
@@ -52,9 +54,10 @@ function InlineLine({ line }: { line: Line }) {
 }
 
 function RichBlocks({ text, className, attrs }: { text: string; className: string; attrs?: Record<string, string> }) {
+  const lang = useContext(LangContext);
   return (
     <div className={className} {...attrs}>
-      {parseBlocks(text).map((b, i) => {
+      {parseBlocks(text, lang).map((b, i) => {
         if (b.type === "h")
           return (
             <h3 key={i} className="doc-h">
@@ -127,6 +130,8 @@ function Photo({
 
 /** A table with hairlines: one row per line, cells separated by « | », the first row as header. */
 function Table({ rows: text, className = "", annotate, field }: { rows: string; className?: string; annotate?: string; field?: string }) {
+  const lang = useContext(LangContext);
+  const t = (s: string) => typo(s, lang);
   const rows = text
     .split("\n")
     .map((l) => l.trim())
@@ -139,7 +144,7 @@ function Table({ rows: text, className = "", annotate, field }: { rows: string; 
       <thead>
         <tr>
           {Array.from({ length: cols }, (_, c) => (
-            <th key={c}>{frenchTypo(rows[0][c] ?? "")}</th>
+            <th key={c}>{t(rows[0][c] ?? "")}</th>
           ))}
         </tr>
       </thead>
@@ -148,7 +153,7 @@ function Table({ rows: text, className = "", annotate, field }: { rows: string; 
           <tr key={i}>
             {Array.from({ length: cols }, (_, c) => (
               <td key={c}>
-                <InlineLine line={parseRich(r[c] ?? "")[0]?.[0] ?? []} />
+                <InlineLine line={parseRich(r[c] ?? "", lang)[0]?.[0] ?? []} />
               </td>
             ))}
           </tr>
@@ -204,6 +209,8 @@ const UNIVERSE_FILL: Record<string, BoxFill> = { decoration: "sable", organisati
 // ——— Free slides: blocks placed by hand, in the 960 × 540 design space of the inner frame ———
 
 function FreeBlock({ block: b, mediaUrl, placeholders, hidden }: { block: Block; mediaUrl: (id: string) => string; placeholders: boolean; hidden: boolean }) {
+  const lang = useContext(LangContext);
+  const t = (s: string) => typo(s, lang);
   const base: CSSProperties = { left: b.x, top: b.y, width: b.w, height: b.h, visibility: hidden ? "hidden" : undefined };
   switch (b.type) {
     case "text": {
@@ -222,8 +229,8 @@ function FreeBlock({ block: b, mediaUrl, placeholders, hidden }: { block: Block;
             placeholders ? <span>Double-click to type</span> : null
           ) : b.style === "button" ? (
             <span className="doc-button">
-              {/r[ée]server un appel/i.test(b.text) && <VisioIcon />}
-              {frenchTypo(plainText(b.text))}
+              {BOOKING_BUTTON.test(b.text) && <VisioIcon />}
+              {t(plainText(b.text))}
             </span>
           ) : (
             <RichBlocks text={b.text} className="doc-rich" />
@@ -241,8 +248,8 @@ function FreeBlock({ block: b, mediaUrl, placeholders, hidden }: { block: Block;
       return <div className="free-block free-box" data-block={b.id} data-accent={b.accent ? "true" : undefined} style={{ ...base, background: fillHex(b.fill) }} />;
     case "line": {
       const vertical = b.h > b.w;
-      const t = b.strong ? 2 : 1;
-      return <div className="free-block free-line" data-block={b.id} data-strong={b.strong ? "true" : undefined} style={{ ...base, width: vertical ? t : b.w, height: vertical ? b.h : t }} />;
+      const thickness = b.strong ? 2 : 1;
+      return <div className="free-block free-line" data-block={b.id} data-strong={b.strong ? "true" : undefined} style={{ ...base, width: vertical ? thickness : b.w, height: vertical ? b.h : thickness }} />;
     }
     case "table":
       return (
@@ -263,6 +270,10 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
   const def = getLayout(slide.layout);
   const uni = getUniverse(universeId);
   const landscape = isLandscape(format);
+  // The visual's language: its typography, and the labels the page draws itself.
+  const lang = languageOf(options);
+  const t = (s: string) => typo(s, lang);
+  const drawn = DRAWN[lang];
   useFit(ref, bodyRef, JSON.stringify([slide, format.id, options, placeholders, universeId, title, index, total]), onFit, (el) => {
     // Free slides: a text block fuller than its box counts as overflow (and is marked for the editor).
     let any = false;
@@ -288,7 +299,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
     if (!f.value) return null;
     return (
       <Wrapper className={`${className}${ph(f)}`} data-field={key} {...freeAttrs(className, raw(f))}>
-        <Rich paragraphs={parseRich(f.value)} as="span" />
+        <Rich paragraphs={parseRich(f.value, lang)} as="span" />
       </Wrapper>
     );
   };
@@ -296,7 +307,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
     const f = field(key);
     return f.value ? (
       <p className={`${className}${ph(f)}`} data-field={key} {...freeAttrs(className, raw(f).replace(/\*/g, ""))}>
-        {frenchTypo(f.value.replace(/\*/g, ""))}
+        {t(f.value.replace(/\*/g, ""))}
       </p>
     ) : null;
   };
@@ -322,7 +333,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       {logo}
       {eyebrow.value && (
         <span className={`doc-eyebrow${ph(eyebrow)}`} data-field="eyebrow">
-          {frenchTypo(eyebrow.value)}
+          {t(eyebrow.value)}
         </span>
       )}
     </div>
@@ -331,7 +342,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
     <div className="doc-foot">
       <span>
         <b>Spanish Mum in Paris</b>
-        {title ? ` · ${frenchTypo(title)}` : ""}
+        {title ? ` · ${t(title)}` : ""}
       </span>
       <span>{total > 1 ? `${pageNo} / ${total}` : ""}</span>
     </div>
@@ -354,21 +365,21 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
         <div className="doc-cover-block" style={tinted && uni ? { background: uni.tint } : undefined} {...(tinted && uni ? { "data-free": "box", "data-free-fill": UNIVERSE_FILL[uni.id] } : {})}>
           {uni && (
             <span className="doc-tag" style={{ background: photo ? uni.tint : "var(--paper)", color: uni.tintInk }}>
-              {uni.number} — {uni.short}
+              {uni.number} — {universeLabel(uni, lang)}
             </span>
           )}
           {eyebrow.value && (
             <p className={`doc-eyebrow${ph(eyebrow)}`} data-field="eyebrow" {...freeAttrs("doc-eyebrow", raw(eyebrow))}>
-              {frenchTypo(eyebrow.value)}
+              {t(eyebrow.value)}
             </p>
           )}
           {rich("title", "doc-cover-title", "h1")}
           {rich("subtitle", "doc-lead")}
           {(preparedFor.value || date.value) && (
             <p className="doc-for" data-field="preparedFor" {...freeAttrs("doc-for", [raw(preparedFor), raw(date)].filter(Boolean).join(" · "))}>
-              {preparedFor.value && <span>{frenchTypo(preparedFor.value)}</span>}
+              {preparedFor.value && <span>{t(preparedFor.value)}</span>}
               {preparedFor.value && date.value && <span className="doc-dot">·</span>}
-              {date.value && <span>{frenchTypo(date.value)}</span>}
+              {date.value && <span>{t(date.value)}</span>}
             </p>
           )}
         </div>
@@ -427,7 +438,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
               <li key={i}>
                 <span className="doc-box" />
                 <span>
-                  <Rich paragraphs={parseRich(it)} as="span" />
+                  <Rich paragraphs={parseRich(it, lang)} as="span" />
                 </span>
               </li>
             ))}
@@ -438,12 +449,12 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       break;
     }
     case "doc-table": {
-      const t = field("table");
+      const table = field("table");
       body = (
         <>
           {rich("title", "doc-title", "h2")}
           {rich("intro", "doc-lead")}
-          <Table rows={t.value} className={ph(t)} annotate={raw(t)} field="table" />
+          <Table rows={table.value} className={ph(table)} annotate={raw(table)} field="table" />
           {rich("note", "doc-note")}
         </>
       );
@@ -461,16 +472,16 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
             {figs.map((f, i) => (
               <div key={i} className="doc-figure" data-free="box" data-free-fill={slide.ground === "paper" ? "cream" : "paper"} data-free-accent="true">
                 <p className={`doc-value${ph(f.value)}`} data-field={`value${f.n}`} {...freeAttrs("doc-value", raw(f.value))}>
-                  {frenchTypo(f.value.value)}
+                  {t(f.value.value)}
                 </p>
                 {f.text.value && (
                   <div className={`doc-figure-text${ph(f.text)}`} data-field={`text${f.n}`} {...freeAttrs("doc-figure-text", raw(f.text))}>
-                    <Rich paragraphs={parseRich(f.text.value)} as="span" />
+                    <Rich paragraphs={parseRich(f.text.value, lang)} as="span" />
                   </div>
                 )}
                 {f.source.value && (
                   <p className={`doc-source${ph(f.source)}`} data-field={`source${f.n}`} {...freeAttrs("doc-source", raw(f.source).replace(/^source\s*:\s*/i, ""))}>
-                    {frenchTypo(f.source.value.replace(/^source\s*:\s*/i, ""))}
+                    {t(f.source.value.replace(/^source\s*:\s*/i, ""))}
                   </p>
                 )}
               </div>
@@ -492,14 +503,14 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       );
       const list = included.length > 0 && (
         <div className="doc-included" data-free="box" data-free-fill={slide.ground === "stone" ? "paper" : "stone"}>
-          <p className="doc-eyebrow" {...freeAttrs("doc-eyebrow", "Ce qui est inclus")}>
-            Ce qui est inclus
+          <p className="doc-eyebrow" {...freeAttrs("doc-eyebrow", drawn.included)}>
+            {drawn.included}
           </p>
           <ul data-field="included" {...freeAttrs("", bullets("included"), "body")}>
             {included.map((it, i) => (
               <li key={i}>
                 <span>
-                  <Rich paragraphs={parseRich(it)} as="span" />
+                  <Rich paragraphs={parseRich(it, lang)} as="span" />
                 </span>
               </li>
             ))}
@@ -510,8 +521,8 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
         <>
           {button.value && (
             <MaybeLink className={`doc-button${ph(button)}`} href="https://calendly.com/spanishmuminparis" attrs={{ ...freeAttrs("doc-button", raw(button)), "data-field": "button" }}>
-              {/r[ée]server un appel/i.test(button.value) && <VisioIcon />}
-              {frenchTypo(button.value)}
+              {BOOKING_BUTTON.test(button.value) && <VisioIcon />}
+              {t(button.value)}
             </MaybeLink>
           )}
           {plain("note", "doc-small")}
@@ -557,7 +568,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
         <div className="doc-swatches-row">
           {palette.length > 0 && (
             <div>
-              <p className="doc-eyebrow">Palette</p>
+              <p className="doc-eyebrow">{drawn.palette}</p>
               <div className="doc-swatches">
                 {palette.map((c) => (
                   <span key={c} className="doc-swatch">
@@ -570,11 +581,11 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
           )}
           {materials.length > 0 && (
             <div>
-              <p className="doc-eyebrow" {...freeAttrs("doc-eyebrow", "Matières")}>
-                Matières
+              <p className="doc-eyebrow" {...freeAttrs("doc-eyebrow", drawn.materials)}>
+                {drawn.materials}
               </p>
               <p className="doc-materials" data-field="materials" {...freeAttrs("doc-materials", materials.join("  ·  "))}>
-                {materials.map((m) => frenchTypo(m)).join("  ·  ")}
+                {materials.map((m) => t(m)).join("  ·  ")}
               </p>
             </div>
           )}
@@ -605,7 +616,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
         <>
           {eyebrow.value && (
             <p className={`doc-eyebrow${ph(eyebrow)}`} data-field="eyebrow" {...freeAttrs("doc-eyebrow", raw(eyebrow))}>
-              {frenchTypo(eyebrow.value)}
+              {t(eyebrow.value)}
             </p>
           )}
           {rich("title", "doc-closing-title", "h2")}
@@ -613,12 +624,12 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
           <ul className="doc-contacts" data-field="contacts" {...freeAttrs("", field("contacts").ph ? "" : lines("contacts").join("\n"), "body")}>
             {lines("contacts").map((c, i) => {
               const href = linkFor(c);
-              return <li key={i}>{href ? <MaybeLink href={href}>{c}</MaybeLink> : frenchTypo(c)}</li>;
+              return <li key={i}>{href ? <MaybeLink href={href}>{c}</MaybeLink> : t(c)}</li>;
             })}
           </ul>
           {signature.value && (
             <p className={`doc-signature${ph(signature)}`} data-field="signature" {...freeAttrs("doc-signature", raw(signature))}>
-              {frenchTypo(signature.value)}
+              {t(signature.value)}
             </p>
           )}
           <p className="doc-tagline" {...freeAttrs("doc-tagline", "Creating a home you love.")}>
@@ -648,7 +659,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
               <li key={i}>
                 <span className="deck-agenda-n">{String(i + 1).padStart(2, "0")}</span>
                 <span>
-                  <Rich paragraphs={parseRich(it)} as="span" />
+                  <Rich paragraphs={parseRich(it, lang)} as="span" />
                 </span>
               </li>
             ))}
@@ -664,22 +675,22 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
       const author = field("author");
       const role = field("role");
       const q = field("quote");
-      const quoted = `«${q.value.replace(/^[«"\s]+|[»"\s]+$/g, "")}»`;
+      const quoted = `«${q.value.replace(/^[«"“\s]+|[»"”\s]+$/g, "")}»`;
       body = (
         <div className="doc-quote-wrap">
           {q.value && (
             <div className={`doc-quote${ph(q)}`} data-field="quote" {...freeAttrs("", q.ph ? "" : quoted, "quote")}>
-              <Rich paragraphs={parseRich(quoted)} />
+              <Rich paragraphs={parseRich(quoted, lang)} />
             </div>
           )}
           {author.value && (
             <p className={`doc-signature${ph(author)}`} data-field="author" {...freeAttrs("doc-signature", raw(author))}>
-              {frenchTypo(author.value)}
+              {t(author.value)}
             </p>
           )}
           {role.value && (
             <p className="doc-eyebrow" data-field="role" {...freeAttrs("doc-eyebrow", raw(role))}>
-              {frenchTypo(role.value)}
+              {t(role.value)}
             </p>
           )}
         </div>
@@ -708,6 +719,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
 
   return (
     <LinksContext.Provider value={links}>
+      <LangContext.Provider value={lang}>
       <div
         ref={ref}
         className={`smp-slide smp-doc doc-${chrome} smp-layout-${slide.layout}`}
@@ -742,6 +754,7 @@ export function DocPage({ format, slide, index, total, universeId, options, medi
           {free}
         </div>
       </div>
+      </LangContext.Provider>
     </LinksContext.Provider>
   );
 }

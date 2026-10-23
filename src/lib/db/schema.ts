@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, real, index } from "drizzle-orm/sqlite-core";
-import type { AssetContent } from "@/lib/content";
+import type { AssetContent, Language } from "@/lib/content";
 
 const now = () => new Date().toISOString();
 
@@ -85,6 +85,8 @@ export type CreateOptions = {
   universe: string; // decoration | organisation | entreprises | none | auto
   images: "auto" | "none" | "library" | "ai";
   slides: number | null; // carousels only; null = let Claude decide
+  /** Language of the content; missing (older assets) = French. */
+  language?: Language;
 };
 
 export type ImageJobRequest = {

@@ -3,11 +3,11 @@
 // text in the brand fonts and Flux generates the photos. Text is never drawn by an image model.
 import { z } from "zod";
 import type { Asset, CreateOptions, Media } from "@/lib/db/schema";
-import { DEFAULT_OPTIONS, type AssetContent, type GalleryItem, type GroundId, type ImageRef, type LayoutId, type Slide } from "@/lib/content";
+import { DEFAULT_OPTIONS, languageOf, type AssetContent, type GalleryItem, type GroundId, type ImageRef, type Language, type LayoutId, type Slide } from "@/lib/content";
 import { ALL_FORMATS, FORMATS, LANDSCAPE_DOCUMENTS, getFormat, isDeck, isDocument, isLandscape, isSocial, withOrientation, type Format } from "@/lib/brand/formats";
 import { LAYOUTS, MAX_GALLERY, equivalentLayout, getLayout, newSlide } from "@/lib/brand/layouts";
 import { GROUNDS, UNIVERSES } from "@/lib/brand/tokens";
-import { PHOTO_BRIEF } from "@/lib/brand/voice";
+import { languageRule, PHOTO_BRIEF } from "@/lib/brand/voice";
 import { describeAsset, structured } from "@/lib/ai/claude";
 
 /** Generated photos per request: a few for a social visual, more for a document with a moodboard. */
@@ -71,8 +71,12 @@ function buildGuide(): string {
   l.push("- Figures: only the figures she gave, with the source and year she gave. Never invent a number, a study, a source or a testimonial. If she asks for figures without giving them, use other templates and say so in the notes.");
   l.push("- Every required field is filled and every text stays within its limit.");
   l.push("- Caption: the post text published with the visual, plain text without asterisks or emoji. LinkedIn: a hook on the first line, short paragraphs, 600 to 1 200 characters, at most three hashtags at the end. Instagram: 300 to 900 characters, « Lien en bio », up to five hashtags. Facebook: 300 to 800 characters, no hashtags needed.");
-  l.push("- Title of the asset: a short working title in French for her library.");
+  l.push("- Title of the asset: a short working title for her library, in the visual's language.");
   l.push("- Notes: two to five short notes in English for Rebeca: the choices you made, and anything she should check or provide.");
+  l.push("");
+  l.push("## Language");
+  l.push("- Every request says which language the visual is in: French (France) by default, or English (UK). Everything her readers see follows it: the texts, the caption, the speaker notes, the working title. Her prompt may be in the other language: translate its content, keep her facts, figures, names and prices exactly.");
+  l.push("- The fixed phrases quoted in French in this guide (« Préparé pour », « à compléter », « Sur devis », « Réserver un appel », « Lien en bio ») have English forms in an English visual: « Prepared for », « to be completed », « On request », « Book a call », « Link in bio ». The studio draws its own labels (« Source », « Glissez », « Ce qui est inclus », « Matières », the universe tag) in the visual's language by itself.");
   l.push("");
   l.push("## A4 documents (exported as PDF)");
   l.push("- Pages, not slides: a text page holds about 1 800 characters; spread longer content over several pages rather than cramming. One subject per page, with a title.");
@@ -87,7 +91,7 @@ function buildGuide(): string {
   l.push("");
   l.push("## Presentations (16:9 slides, exported as PowerPoint or PDF)");
   l.push("- Slides Rebeca talks over, or sends: one idea per slide, few words, large type. A text slide (doc-page) holds at most about 600 characters, in short lines or bullets; a list, a checklist or a table at most eight rows; spread longer content over several slides.");
-  l.push("- Every slide has speaker notes (notes): what Rebeca says on that slide, two to five sentences in French in her voice, as she would speak. The slide shows the key words; the notes carry the argument, the examples and the transition to the next slide. Notes are null for every other format.");
+  l.push("- Every slide has speaker notes (notes): what Rebeca says on that slide, two to five sentences in the visual's language, in her voice, as she would speak. The slide shows the key words; the notes carry the argument, the examples and the transition to the next slide. Notes are null for every other format.");
   l.push("- Structure: a cover (doc-cover, often with a photo), an agenda (deck-agenda) when there are three parts or more, a section divider (deck-section, numbered 01, 02…) before each part, two to four slides per part, then the closing slide (doc-closing). Eight to sixteen slides. Alternate cream and paper grounds; section dividers on stone.");
   l.push("- Corporate deck (deck-corporate): « Préparé pour » the company on the cover. A proposal: the context (what is at stake for them), key figures (only figures she gave, each with its source), the programme of the Home & Life Balance workshop (a table or a page), the offer (price « Sur devis » unless she gives one), the closing slide. The workshop itself: advice slides (text, photo, checklist), a quote, the closing slide.");
   l.push("- Client presentation (deck-client): for one client she names, written to them (« vous »): the intention, the moodboard (gallery, palette, materials), photo slides, the shopping list (table), the next steps, the closing slide. Never invent products, shops, prices or links: write « à compléter ».");
@@ -128,7 +132,7 @@ const SlideOut = z.object({
   fields: z.array(z.object({ key: z.string(), value: z.string() })),
   photo: PhotoOut,
   gallery: z.array(PhotoOut).describe("Moodboard photos; empty for every other template"),
-  notes: z.string().nullable().describe("Presentations only: the speaker notes of this slide, in French; null for every other format"),
+  notes: z.string().nullable().describe("Presentations only: the speaker notes of this slide, in the visual's language; null for every other format"),
 });
 
 const ComposeSchema = z.object({
@@ -191,7 +195,7 @@ const ALIASES: Record<string, string[]> = {
 
 function normalize(
   out: z.infer<typeof ComposeSchema>,
-  ctx: { format: Format; media: Media[]; existing: Asset | null; images: CreateOptions["images"] },
+  ctx: { format: Format; media: Media[]; existing: Asset | null; images: CreateOptions["images"]; language: Language },
 ): Proposal {
   const { format, existing } = ctx;
   const doc = isDocument(format);
@@ -290,7 +294,7 @@ function normalize(
     content: {
       slides,
       caption: out.caption.trim(),
-      options: existing ? existing.content.options : { ...DEFAULT_OPTIONS, universeTag: isSocial(format) && format.multi && Boolean(universe) },
+      options: existing ? existing.content.options : { ...DEFAULT_OPTIONS, language: ctx.language, universeTag: isSocial(format) && format.multi && Boolean(universe) },
     },
     notes: notes.slice(0, 6),
     generate,
@@ -308,12 +312,14 @@ export function parseOptions(b: Record<string, unknown>): CreateOptions {
     universe: typeof b.universe === "string" && b.universe ? b.universe : "auto",
     images,
     slides: slides >= 2 && slides <= 20 ? Math.round(slides) : null,
+    language: b.language === "en" ? "en" : "fr",
   };
 }
 
 
 export async function composeFromPrompt(prompt: string, options: CreateOptions, media: Media[]): Promise<Proposal> {
   const fixed = options.formatId !== "auto" ? getFormat(options.formatId) : null;
+  const language = languageOf(options);
   // Portrait is only the default orientation of the picker: her prompt may ask for the other one.
   const turned = fixed && isDocument(fixed) ? withOrientation(fixed, !isLandscape(fixed)) : null;
   const user = [
@@ -328,17 +334,18 @@ export async function composeFromPrompt(prompt: string, options: CreateOptions, 
     photoRule(options.images),
     options.images === "none" || options.images === "ai" ? "" : libraryList(media),
     "",
-    "Write everything in French (France), except the names that stay in English.",
+    languageRule(language),
   ]
     .filter(Boolean)
     .join("\n");
   const out = await structured({ schema: ComposeSchema, operation: "compose", user, effort: "medium", guide: COMPOSE_GUIDE });
   const format = turned && out.formatId === turned.id ? turned : (fixed ?? getFormat(out.formatId));
-  return normalize(out, { format, media, existing: null, images: options.images });
+  return normalize(out, { format, media, existing: null, images: options.images, language });
 }
 
 export async function editWithPrompt(asset: Asset, instruction: string, media: Media[]): Promise<Proposal> {
   const format = getFormat(asset.formatId);
+  const language = languageOf(asset.content.options);
   // A document may change orientation when she asks for it; nothing else changes format here.
   const turned = isDocument(format) ? withOrientation(format, !isLandscape(format)) : null;
   const user = [
@@ -355,15 +362,18 @@ export async function editWithPrompt(asset: Asset, instruction: string, media: M
     "",
     photoRule("auto"),
     libraryList(media),
+    "",
+    languageRule(language),
   ].join("\n");
   const out = await structured({ schema: ComposeSchema, operation: "edit", user, effort: "medium", guide: COMPOSE_GUIDE, assetId: asset.id });
   const chosen = turned && out.formatId === turned.id ? turned : format;
-  const p = normalize({ ...out, formatId: chosen.id }, { format: chosen, media, existing: asset, images: "auto" });
+  const p = normalize({ ...out, formatId: chosen.id }, { format: chosen, media, existing: asset, images: "auto", language });
   return { ...p, title: asset.title, universe: asset.universe };
 }
 
 export async function regenerateFromPrompt(asset: Asset, prompt: string, media: Media[]): Promise<Proposal> {
-  const options: CreateOptions = { ...(asset.promptOptions ?? { universe: "auto", images: "auto", slides: null }), formatId: asset.formatId };
+  // The language is the asset's current one (she may have switched it in the editor since the prompt).
+  const options: CreateOptions = { ...(asset.promptOptions ?? { universe: "auto", images: "auto", slides: null }), formatId: asset.formatId, language: languageOf(asset.content.options) };
   const p = await composeFromPrompt(prompt, options, media);
   // Same asset: keep its options (logo, page numbers…).
   return { ...p, content: { ...p.content, options: asset.content.options } };
@@ -385,7 +395,7 @@ export async function improvePrompt(prompt: string, options: CreateOptions) {
     "- Never invent figures or sources: where a figure would help, write « [chiffre à fournir, avec sa source] ».",
     "- 200 words at most. Plain text, short lines or a short list.",
     "",
-    `Her choices: format ${options.formatId === "auto" ? "to be chosen" : options.formatId}, universe ${options.universe}, photos ${options.images}${options.slides ? `, ${options.slides} slides` : ""}.`,
+    `Her choices: format ${options.formatId === "auto" ? "to be chosen" : options.formatId}, universe ${options.universe}, photos ${options.images}${options.slides ? `, ${options.slides} slides` : ""}, the visual in ${languageOf(options) === "en" ? "English (the brief can stay in her language; say the visual is in English)" : "French"}.`,
     "",
     "Her prompt:",
     prompt.trim(),

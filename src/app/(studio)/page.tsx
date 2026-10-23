@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Asset, CreateOptions } from "@/lib/db/schema";
+import { LANGUAGES, languageOf } from "@/lib/content";
 import { FORMATS, PLATFORMS, getFormat, isDocument, isLandscape, withOrientation } from "@/lib/brand/formats";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { api, relativeTime } from "@/components/ui/api";
@@ -88,7 +89,7 @@ export default function CreatePage() {
   const [prompt, setPrompt] = useState("");
   const [previous, setPrevious] = useState<string | null>(null);
   const [added, setAdded] = useState<string[]>([]);
-  const [options, setOptions] = useState<CreateOptions>({ formatId: "auto", universe: "auto", images: "auto", slides: null });
+  const [options, setOptions] = useState<CreateOptions>({ formatId: "auto", universe: "auto", images: "auto", slides: null, language: "fr" });
   const [improving, setImproving] = useState(false);
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -219,7 +220,7 @@ export default function CreatePage() {
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-[1.3fr_1fr_1.4fr_0.7fr] gap-5">
+      <div className="mt-6 grid grid-cols-[1.2fr_1fr_1.3fr_0.6fr_0.9fr] gap-5">
         <div>
           <label className="label" htmlFor="opt-format">
             Format
@@ -303,6 +304,17 @@ export default function CreatePage() {
             ))}
           </select>
         </div>
+        <div>
+          <p className="label">Language</p>
+          <div className="flex flex-wrap gap-1.5">
+            {LANGUAGES.map((l) => (
+              <button key={l.id} className="chip" aria-pressed={languageOf(options) === l.id} onClick={() => set({ language: l.id })} title={l.hint} disabled={busy}>
+                {l.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[11.5px] text-muted">{languageOf(options) === "en" ? "Texts in English, whatever language the prompt is in." : "Texts in French."}</p>
+        </div>
       </div>
 
       <div className="mt-8 flex items-center justify-between gap-6 border-t border-line pt-6">
@@ -372,7 +384,7 @@ export default function CreatePage() {
                     setPrompt(a.prompt ?? "");
                     setPrevious(null);
                     setAdded([]);
-                    if (a.promptOptions) setOptions(a.promptOptions);
+                    if (a.promptOptions) setOptions({ ...a.promptOptions, language: languageOf(a.promptOptions) });
                     area.current?.focus();
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}

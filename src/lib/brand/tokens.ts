@@ -1,5 +1,5 @@
 // Brand colours, from the brand guidelines (v1.0, October 2026), section 02.
-import type { GroundId, UniverseId } from "@/lib/content";
+import type { GroundId, Language, UniverseId } from "@/lib/content";
 
 export const COLORS = {
   cream: "#F7F4EE",
@@ -43,3 +43,17 @@ export const UNIVERSES: {
 export function universe(id: string | null | undefined) {
   return UNIVERSES.find((u) => u.id === id) ?? null;
 }
+
+/** The label drawn in the universe tag: the French short label, or the English name on an English visual. */
+export function universeLabel(u: (typeof UNIVERSES)[number], language: Language): string {
+  return language === "en" ? u.name : u.short;
+}
+
+/** The booking button, in either language; it shows the visio icon as on the site. */
+export const BOOKING_BUTTON = /r[ée]server un appel|book a call/i;
+
+/** Labels the studio draws itself on the slides and pages, by language. */
+export const DRAWN: Record<Language, { swipe: string; source: string; included: string; materials: string; palette: string }> = {
+  fr: { swipe: "Glissez", source: "Source : ", included: "Ce qui est inclus", materials: "Matières", palette: "Palette" },
+  en: { swipe: "Swipe", source: "Source: ", included: "What is included", materials: "Materials", palette: "Palette" },
+};

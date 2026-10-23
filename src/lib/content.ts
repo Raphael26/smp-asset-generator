@@ -84,8 +84,23 @@ export type Block = TextBlock | ImageBlock | BoxBlock | LineBlock | TableBlock;
 
 export type LogoMode = "wordmark" | "monogram" | "none";
 
+/** The language the visual's content is written in. The UI stays in English either way. */
+export type Language = "fr" | "en";
+
+export const LANGUAGES: { id: Language; label: string; hint: string }[] = [
+  { id: "fr", label: "Français", hint: "Texts in French, French typography" },
+  { id: "en", label: "English", hint: "Texts in English (UK), English typography" },
+];
+
+/** The language of an asset; visuals made before the option existed are French. */
+export function languageOf(options: { language?: Language } | null | undefined): Language {
+  return options?.language === "en" ? "en" : "fr";
+}
+
 export type AssetOptions = {
   logo: LogoMode;
+  /** Language of the texts: typography, the fixed labels drawn by the studio, and what Claude writes. Missing = French. */
+  language?: Language;
   /** "1 / 5" in the footer of multi-slide assets. */
   pageNumbers: boolean;
   /** « Glissez → » on every slide but the last of a carousel. */
@@ -102,6 +117,7 @@ export type AssetContent = {
 
 export const DEFAULT_OPTIONS: AssetOptions = {
   logo: "wordmark",
+  language: "fr",
   pageNumbers: false,
   swipeHint: true,
   universeTag: false,

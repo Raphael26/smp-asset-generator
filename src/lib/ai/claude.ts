@@ -6,8 +6,9 @@ import { z } from "zod";
 import type { Asset } from "@/lib/db/schema";
 import { getFormat } from "@/lib/brand/formats";
 import { getLayout, imageFrame } from "@/lib/brand/layouts";
+import { languageOf } from "@/lib/content";
 import { universe } from "@/lib/brand/tokens";
-import { BRAND_BRIEF, PHOTO_BRIEF } from "@/lib/brand/voice";
+import { BRAND_BRIEF, languageRule, PHOTO_BRIEF } from "@/lib/brand/voice";
 import { PHOTO_PRESETS } from "@/lib/brand/image-presets";
 import { CLAUDE_MODEL, priceFor, tokenCost } from "@/lib/ai/pricing";
 import { recordCost, type Operation } from "@/lib/costs";
@@ -82,6 +83,7 @@ export function describeAsset(asset: Asset, onlySlide: number | null): string {
   const lines: string[] = [];
   lines.push(`Format: ${format.platform} ${format.name.toLowerCase()} (${format.width}×${format.height}${format.multi ? `, ${asset.content.slides.length} slides` : ""}).`);
   lines.push(`Universe: ${uni ? `${uni.number} — ${uni.short} (${uni.name})` : "none in particular"}.`);
+  lines.push(`Language of the visual: ${languageOf(asset.content.options) === "en" ? "English (UK)" : "French (France)"}.`);
   lines.push(`Working title: ${asset.title}`);
   lines.push("");
   asset.content.slides.forEach((slide, i) => {
@@ -149,6 +151,7 @@ export async function improveText(asset: Asset, opts: { slide: number | null; in
       : "Leave the caption out (return null).",
     "",
     "Return every field of every slide you worked on, with its key exactly as given, improved or unchanged. Leave optional fields empty if she left them empty. Notes in English.",
+    languageRule(languageOf(asset.content.options)),
   ].join("\n");
   const out = await structured({ schema: ImproveSchema, operation: "improve", user, effort: "medium", assetId: asset.id });
 
@@ -194,6 +197,7 @@ export async function writeCaption(asset: Asset, mode: "write" | "improve", inst
       : "Write the caption (the text published or sent with this visual or document) in Rebeca’s voice, from what the slides or pages say. Do not add facts that are not on them.",
     PLATFORM_CAPTION[format.platform] ?? PLATFORM_CAPTION.LinkedIn,
     "Captions use plain text: no *asterisks*, no emoji.",
+    languageRule(languageOf(asset.content.options)),
     instruction.trim() ? `Her request: ${instruction.trim()}` : "",
     "",
     describeAsset(asset, null),
@@ -236,7 +240,7 @@ const ReviewSchema = z.object({
       field: z.string().nullable(),
       severity: z.enum(["important", "suggestion"]),
       comment: z.string().describe("In English"),
-      suggestion: z.string().nullable().describe("A replacement text in French, if useful"),
+      suggestion: z.string().nullable().describe("A replacement text in the visual's language, if useful"),
     }),
   ),
 });
@@ -245,6 +249,7 @@ export async function reviewAsset(asset: Asset) {
   const user = [
     "Review this visual against the Spanish Mum in Paris brand guidelines: voice (Rebeca speaks, warm, practical, reassuring), titles, facts and sources, names, and whether each text fits its template.",
     "Only flag real problems or clear improvements: eight comments at most, the most important first. If it is already right, say so and return no comments.",
+    languageRule(languageOf(asset.content.options)),
     "",
     describeAsset(asset, null),
     "",

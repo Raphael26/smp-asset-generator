@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Asset } from "@/lib/db/schema";
-import type { AssetOptions, LogoMode } from "@/lib/content";
+import { LANGUAGES, languageOf, type AssetOptions, type LogoMode } from "@/lib/content";
 import { formatLabel, getFormat, isDeck, isDocument, isSocial } from "@/lib/brand/formats";
 import { UNIVERSES } from "@/lib/brand/tokens";
 import { STATUS_OPTIONS } from "@/components/studio/StatusBadge";
@@ -75,6 +75,20 @@ export function PostInspector({
       </section>
 
       <section>
+        <p className="label">Language</p>
+        <div className="flex gap-1.5">
+          {LANGUAGES.map((l) => (
+            <button key={l.id} className="chip" aria-pressed={languageOf(o) === l.id} onClick={() => onOptions({ language: l.id })} title={l.hint}>
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1.5 text-[11.5px] text-muted">
+          Sets the typography, the labels the studio draws (« Source », « Glissez »…) and the language Claude writes in. It does not translate what is there: switch it, then ask in the prompt bar for « traduis tout en anglais ».
+        </p>
+      </section>
+
+      <section>
         <p className="label">Logo</p>
         <div className="flex gap-1.5">
           {(
@@ -100,7 +114,7 @@ export function PostInspector({
             <>
               <label className="flex items-center gap-2.5">
                 <input type="checkbox" className="accent-ink" checked={o.swipeHint} onChange={(e) => onOptions({ swipeHint: e.target.checked })} />
-                « Glissez → » on each slide but the last
+                « {languageOf(o) === "en" ? "Swipe" : "Glissez"} → » on each slide but the last
               </label>
               <label className="flex items-center gap-2.5">
                 <input type="checkbox" className="accent-ink" checked={o.pageNumbers} onChange={(e) => onOptions({ pageNumbers: e.target.checked })} />

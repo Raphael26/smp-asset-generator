@@ -1,7 +1,8 @@
 // Brand check: the rules from the guidelines that can be verified without a model.
-import type { AssetContent } from "@/lib/content";
+import { languageOf, type AssetContent, type Language } from "@/lib/content";
 import { getLayout } from "@/lib/brand/layouts";
 import { isDeck, type Format } from "@/lib/brand/formats";
+import { BOOKING_BUTTON } from "@/lib/brand/tokens";
 import { plainText } from "@/lib/brand/typography";
 
 export type Severity = "error" | "warning" | "tip";
@@ -14,30 +15,49 @@ export type Issue = {
   field: string | null;
 };
 
-const BANNED: { re: RegExp; why: string }[] = [
-  { re: /\brévolutionnaire/i, why: "sales cliché" },
-  { re: /\bincroyable/i, why: "sales cliché" },
-  { re: /\b(le|la|les) meilleur(e|s|es)?\b/i, why: "superlative" },
-  { re: /\bexceptionnel(le)?s?\b/i, why: "superlative" },
-  { re: /\boptimisation\b/i, why: "jargon: say « organisation »" },
-  { re: /\bprocess\b/i, why: "jargon" },
-  { re: /\bguéridon/i, why: "rare word that sounds machine-written" },
-  { re: /\bécru\b/i, why: "rare word that sounds machine-written" },
-  { re: /\bsculptura(l|le|ux)\b/i, why: "rare word that sounds machine-written" },
-];
+const BANNED: Record<Language, { re: RegExp; why: string }[]> = {
+  fr: [
+    { re: /\brévolutionnaire/i, why: "sales cliché" },
+    { re: /\bincroyable/i, why: "sales cliché" },
+    { re: /\b(le|la|les) meilleur(e|s|es)?\b/i, why: "superlative" },
+    { re: /\bexceptionnel(le)?s?\b/i, why: "superlative" },
+    { re: /\boptimisation\b/i, why: "jargon: say « organisation »" },
+    { re: /\bprocess\b/i, why: "jargon" },
+    { re: /\bguéridon/i, why: "rare word that sounds machine-written" },
+    { re: /\bécru\b/i, why: "rare word that sounds machine-written" },
+    { re: /\bsculptura(l|le|ux)\b/i, why: "rare word that sounds machine-written" },
+  ],
+  en: [
+    { re: /\brevolutionary\b/i, why: "sales cliché" },
+    { re: /\b(incredible|amazing|game[- ]chang(er|ing))\b/i, why: "sales cliché" },
+    { re: /\bthe (very )?best\b/i, why: "superlative" },
+    { re: /\bexceptional\b/i, why: "superlative" },
+    { re: /\boptimi[sz](e|ation|ing)\b/i, why: "jargon: say « organise »" },
+    { re: /\bprocess(es)?\b/i, why: "jargon" },
+    { re: /\b(sculptural|curated|elevated)\b/i, why: "word that sounds machine-written" },
+  ],
+};
 
-const ACRONYMS = new Set(["INED", "INSEE", "DARES", "OCDE", "OECD", "UNAF", "CNAF", "APEC", "IFOP", "ANACT", "URSSAF", "TVA", "PDF", "RH"]);
+// The one exclamation mark allowed, and the « we » Rebeca never uses, in each language.
+const THANKS: Record<Language, RegExp> = { fr: /merci\s*!/gi, en: /thank you\s*!/gi };
+const PLURAL: Record<Language, RegExp> = { fr: /\b(nous|notre|nos)\b|l[’']équipe/i, en: /\b(we|our|ours|us)\b|the team/i };
+const PLURAL_MESSAGE: Record<Language, string> = {
+  fr: "Rebeca speaks in the first person singular: « je », not « nous » or « l’équipe ».",
+  en: "Rebeca speaks in the first person singular: « I », not « we » or « the team ».",
+};
+
+const ACRONYMS = new Set(["INED", "INSEE", "DARES", "OCDE", "OECD", "UNAF", "CNAF", "APEC", "IFOP", "ANACT", "URSSAF", "TVA", "VAT", "PDF", "RH", "HR"]);
 
 const EMOJI = /\p{Extended_Pictographic}/u;
 
-function textRules(text: string, slide: number | null, field: string | null, issues: Issue[]) {
+function textRules(text: string, slide: number | null, field: string | null, issues: Issue[], language: Language) {
   const t = plainText(text);
   if (!t) return;
   if (EMOJI.test(t)) issues.push({ severity: "error", slide, field, message: "No emoji (rule 10)." });
-  if (/!/.test(t.replace(/merci\s*!/gi, ""))) issues.push({ severity: "warning", slide, field, message: "No exclamation marks, except « Merci ! » (rule 10)." });
-  if (/\b(nous|notre|nos)\b|l[’']équipe/i.test(t))
-    issues.push({ severity: "warning", slide, field, message: "Rebeca speaks in the first person singular: « je », not « nous » or « l’équipe »." });
-  for (const b of BANNED) {
+  if (/!/.test(t.replace(THANKS[language], "")))
+    issues.push({ severity: "warning", slide, field, message: `No exclamation marks, except « ${language === "en" ? "Thank you!" : "Merci !"} » (rule 10).` });
+  if (PLURAL[language].test(t)) issues.push({ severity: "warning", slide, field, message: PLURAL_MESSAGE[language] });
+  for (const b of BANNED[language]) {
     const m = t.match(b.re);
     if (m) issues.push({ severity: "warning", slide, field, message: `« ${m[0]} »: ${b.why}. Prefer everyday words.` });
   }
@@ -54,6 +74,8 @@ function textRules(text: string, slide: number | null, field: string | null, iss
 
 export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<string>; format?: Format } = {}): Issue[] {
   const issues: Issue[] = [];
+  const language = languageOf(content.options);
+  const bookingLabel = language === "en" ? "Book a call" : "Réserver un appel";
   // Slides are read from across a room: shorter limits than the pages they are drawn from.
   const deck = opts.format ? isDeck(opts.format) : false;
   content.slides.forEach((slide, i) => {
@@ -74,7 +96,7 @@ export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<stri
         const max = deck && (f.kind === "rich" || f.kind === "text") ? Math.min(f.max, 600) : f.max;
         if (plain.length > max) issues.push({ severity: "warning", slide: i, field: f.key, message: `${f.label}: ${plain.length} characters, aim for ${max} or fewer${max < f.max ? " on a slide" : ""}.` });
       }
-      textRules(value, i, f.key, issues);
+      textRules(value, i, f.key, issues, language);
     }
     const title = plainText(slide.fields.title ?? "");
     // Offer names (Room Makeover…) are names, not sentences.
@@ -93,14 +115,14 @@ export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<stri
         else if (source && !/\b(19|20)\d{2}\b/.test(source)) issues.push({ severity: "warning", slide: i, field: `source${n}`, message: `Source ${n}: add the year.` });
       }
     }
-    if (slide.layout === "doc-table" && /à compléter/i.test(slide.fields.table ?? ""))
-      issues.push({ severity: "warning", slide: i, field: "table", message: "Some cells say « à compléter »: fill them in before sending." });
+    if (slide.layout === "doc-table" && /à compléter|to be completed/i.test(slide.fields.table ?? ""))
+      issues.push({ severity: "warning", slide: i, field: "table", message: `Some cells say « ${language === "en" ? "to be completed" : "à compléter"} »: fill them in before sending.` });
     if (slide.layout === "doc-moodboard" && !(slide.gallery ?? []).some((g) => g.image || g.photoJob))
       issues.push({ severity: "tip", slide: i, field: "gallery", message: "The moodboard has no photos yet." });
     if (slide.layout === "free")
       for (const b of slide.blocks ?? []) {
         if (b.type === "text") {
-          textRules(b.text, i, `block:${b.id}`, issues);
+          textRules(b.text, i, `block:${b.id}`, issues, language);
           const n = plainText(b.text).length;
           if (n > 600) issues.push({ severity: "warning", slide: i, field: `block:${b.id}`, message: `A text block holds ${n} characters: aim for 600 or fewer on a slide.` });
         }
@@ -116,11 +138,11 @@ export function lintContent(content: AssetContent, opts: { aiMediaIds?: Set<stri
       issues.push({ severity: "tip", slide: i, field: "image", message: "AI image: fine for mood, never present it as a client’s home or as Rebeca’s work." });
     if (slide.layout === "cta") {
       const button = plainText(slide.fields.button ?? "");
-      if (button && /appel|rendez-vous|rdv/i.test(button) && button !== "Réserver un appel")
-        issues.push({ severity: "tip", slide: i, field: "button", message: "The booking button always says « Réserver un appel »." });
+      if (button && (BOOKING_BUTTON.test(button) || /appel|rendez-vous|rdv|\bcall\b|appointment|meeting/i.test(button)) && button !== bookingLabel)
+        issues.push({ severity: "tip", slide: i, field: "button", message: `The booking button always says « ${bookingLabel} ».` });
     }
   });
-  textRules(content.caption, null, "caption", issues);
+  textRules(content.caption, null, "caption", issues, language);
   return issues;
 }
 
